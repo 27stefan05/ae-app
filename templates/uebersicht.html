@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Übersicht</title>
+    <link href="/static/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <script src="/static/jquery-3.6.0.min.js"></script>
+    <script src="/static/jquery.dataTables.min.js"></script>
+    <script src="/static/dataTables.bootstrap5.min.js"></script>
+    <link rel="stylesheet" href="/static/bootstrap-icons.css">
+    <style>
+        .custom-header {
+            background-color: rgb(0, 120, 220);
+        }
+        .btn-uniper {
+            background-color: rgb(0, 120, 220);
+            border-color: rgb(0, 120, 220);
+            color: white;
+        }
+        .btn-uniper:hover {
+            background-color: rgb(0, 100, 200);
+            border-color: rgb(0, 100, 200);
+            color: white;
+        }
+        .btn-outline-uniper {
+            color: white;
+            border-color: white;
+        }
+        .btn-outline-uniper:hover {
+            background-color: rgb(0, 120, 220);
+            color: white;
+        }
+        .btn-uniper-outline-secondary {
+            color: rgb(0, 120, 220);
+            border-color: rgb(0, 120, 220);
+        }
+        .btn-uniper-outline-secondary:hover {
+            background-color: rgb(0, 120, 220);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <header class="custom-header text-white p-3">
+        <div class="container d-flex justify-content-between align-items-center">
+            <img src="/static/logo.png" alt="Uniper Logo" height="70">
+            <a href="/einstellungen" class="btn btn-outline-uniper">
+                <img src="/static/setting.svg" alt="Einstellungen" width="24" style="filter: brightness(0) invert(1);">
+            </a>
+        </div>
+    </header>
+    <div class="container mt-5">
+        <h3 class="text-center">Übersicht aller Scheine</h3>
+        <table id="uebersichtTable" class="table table-striped">
+            <thead>
+                <tr>
+                    <th>AE Nummer</th>
+                    <th>Personen</th>
+                    <th>Firma</th>
+                    <th>Ort</th>
+                    <th>Telefonnummer</th>
+                    <th>Mappe</th>
+                    <th>Bemerkung</th> <!-- Neue Spalte -->
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <div class="mt-3 text-center">
+            <a href="/download_pdf" class="btn btn-uniper mt-3" target="_blank">PDF herunterladen</a>
+            <a href="/" class="btn btn-uniper-outline-secondary mt-3 ms-2">Zurück</a>
+        </div>
+    </div>
+    <script>
+        $(document).ready(function() {
+            $('#uebersichtTable').DataTable({
+                ajax: {
+                    url: '/scheine',
+                    dataSrc: ''
+                },
+                columns: [
+                    { data: 'ae_nummer' },
+                    { data: 'personen' },
+                    { data: 'firma' },
+                    { data: 'ort' },
+                    { data: 'telefonnummer' },
+                    { data: 'fach' },
+                    { data: 'bemerkung' }, // Neue Spalte für Bemerkung
+                    {
+                        data: 'status',
+                        render: function(data, type, row) {
+                            if (type === 'display') {
+                                if (data === 'ausgegeben') return 'In Arbeit';
+                                if (data === 'zurueckgegeben') return 'Zurück';
+                            }
+                            return data; // Rückgabe des Originalwerts für Sortierung/Suche
+                        }
+                    }
+                ],
+                order: [[5, 'asc']], // Sortiere nach Mappe
+                language: {
+                    "emptyTable": "Keine Daten in der Tabelle vorhanden",
+                    "info": "Zeige _START_ bis _END_ von _TOTAL_ Einträgen",
+                    "infoEmpty": "Zeige 0 bis 0 von 0 Einträgen",
+                    "infoFiltered": "(gefiltert aus _MAX_ Einträgen)",
+                    "lengthMenu": "Zeige _MENU_ Einträge",
+                    "loadingRecords": "Lade...",
+                    "processing": "Verarbeite...",
+                    "search": "Suchen:",
+                    "zeroRecords": "Keine passenden Einträge gefunden",
+                    "paginate": {
+                        "first": "Erste",
+                        "last": "Letzte",
+                        "next": "Nächste",
+                        "previous": "Vorherige"
+                    },
+                    "aria": {
+                        "sortAscending": ": aktivieren, um aufsteigend zu sortieren",
+                        "sortDescending": ": aktivieren, um absteigend zu sortieren"
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

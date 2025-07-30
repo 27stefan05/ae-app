@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Eingabe</title>
+    <link href="/static/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="/static/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="/static/bootstrap-icons.css">
+    <style>
+        .custom-header {
+            background-color: rgb(0, 120, 220);
+        }
+        .btn-uniper {
+            background-color: rgb(0, 120, 220);
+            border-color: rgb(0, 120, 220);
+            color: white;
+        }
+        .btn-uniper:hover {
+            background-color: rgb(0, 100, 200);
+            border-color: rgb(0, 100, 200);
+            color: white;
+        }
+        .btn-outline-uniper {
+            color: white;
+            border-color: white;
+        }
+        .btn-outline-uniper:hover {
+            background-color: rgb(0, 120, 220);
+            color: white;
+        }
+        .btn-uniper-outline-secondary {
+            color: rgb(0, 120, 220);
+            border-color: rgb(0, 120, 220);
+        }
+        .btn-uniper-outline-secondary:hover {
+            background-color: rgb(0, 120, 220);
+            color: white;
+        }
+        .mappe-number {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <header class="custom-header text-white p-3">
+        <div class="container d-flex justify-content-between align-items-center">
+            <img src="/static/logo.png" alt="Uniper Logo" height="70">
+            <a href="/einstellungen" class="btn btn-outline-uniper">
+                <img src="/static/setting.svg" alt="Einstellungen" width="24" style="filter: brightness(0) invert(1);">
+            </a>
+        </div>
+    </header>
+    <div class="container mt-5">
+        <h3>Eingabe neuer Schein</h3>
+        <form id="eingabeForm">
+            <div class="mb-3">
+                <label for="ae_nummer">AE Nummer</label>
+                <input type="text" class="form-control" id="ae_nummer" name="ae_nummer" value="{{ ae_nummer }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="personen">Anzahl Mitarbeiter</label>
+                <input type="number" class="form-control" id="personen" name="personen" required>
+            </div>
+            <div class="mb-3">
+                <label for="telefonnummer">Telefonnummer</label>
+                <input type="text" class="form-control" id="telefonnummer" name="telefonnummer">
+            </div>
+            <div class="mb-3">
+                <label for="ort">Ort</label>
+                <select class="form-select" id="ort" name="ort">
+                    <option value="">Auswählen...</option>
+                    {% for o in orte %}
+                        <option value="{{ o }}">{{ o }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" class="form-control mt-2" id="new_ort" name="new_ort" placeholder="Oder neu hinzufügen...">
+            </div>
+            <div class="mb-3">
+                <label for="firma">Firma</label>
+                <select class="form-select" id="firma" name="firma">
+                    <option value="">Auswählen...</option>
+                    {% for f in firmen %}
+                        <option value="{{ f }}">{{ f }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" class="form-control mt-2" id="new_firma" name="new_firma" placeholder="Oder neu hinzufügen...">
+            </div>
+            <div class="mb-3">
+                <label for="bemerkung">Bemerkung</label>
+                <textarea class="form-control" id="bemerkung" name="bemerkung" rows="3" placeholder="Optionale Bemerkung"></textarea>
+            </div>
+            <button type="submit" class="btn btn-uniper">Speichern</button>
+            <a href="/" class="btn btn-uniper-outline-secondary">Abbrechen</a>
+        </form>
+    </div>
+
+    <!-- Modal für Mappe-Bestätigung -->
+    <div class="modal fade" id="mappeModal" tabindex="-1" aria-labelledby="mappeModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header text-center">
+                    <h5 class="modal-title" id="mappeModalLabel">Bitte AE in Mappe:</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <div class="mappe-number" id="mappeNumber"></div>
+                </div>
+                <div class="modal-footer d-flex justify-content-center">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal" onclick="redirectToIndex()">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('eingabeForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            fetch('/eingabe', {
+                method: 'POST',
+                body: formData
+            }).then(res => {
+                if (!res.ok) throw new Error('Fehler beim Speichern');
+                return res.json();
+            }).then(data => {
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    document.getElementById('mappeNumber').textContent = data.fach;
+                    const modal = new bootstrap.Modal(document.getElementById('mappeModal'));
+                    modal.show();
+                }
+            }).catch(error => {
+                console.error('Fehler beim Speichern:', error);
+                alert('Fehler beim Speichern des Scheins. Überprüfe die Konsole für Details.');
+            });
+        });
+
+        function redirectToIndex() {
+            window.location.href = '/';
+        }
+    </script>
+</body>
+</html>

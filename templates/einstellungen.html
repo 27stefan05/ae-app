@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Einstellungen</title>
+    <link href="/static/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="/static/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="/static/bootstrap-icons.css">
+    <style>
+        .custom-header {
+            background-color: rgb(0, 120, 220);
+        }
+        .btn-uniper {
+            background-color: rgb(0, 120, 220);
+            border-color: rgb(0, 120, 220);
+            color: white;
+        }
+        .btn-uniper:hover {
+            background-color: rgb(0, 100, 200);
+            border-color: rgb(0, 100, 200);
+            color: white;
+        }
+        .btn-outline-uniper {
+            color: white;
+            border-color: white;
+        }
+        .btn-outline-uniper:hover {
+            background-color: rgb(0, 120, 220);
+            color: white;
+        }
+        .btn-uniper-outline-secondary {
+            color: rgb(0, 120, 220);
+            border-color: rgb(0, 120, 220);
+        }
+        .btn-uniper-outline-secondary:hover {
+            background-color: rgb(0, 120, 220);
+            color: white;
+        }
+        .new-entry-list {
+            list-style: none;
+            padding: 0;
+        }
+        .new-entry-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #f8f9fa;
+            padding: 5px 10px;
+            margin-bottom: 5px;
+            border-radius: 5px;
+        }
+        /* Stil für den Lösch-Button */
+        .delete-btn {
+            border-color: rgb(230, 37, 46);
+            color: rgb(230, 37, 46);
+        }
+        .delete-btn:hover {
+            background-color: rgb(230, 37, 46);
+            border-color: rgb(230, 37, 46);
+            color: white;
+        }
+        .delete-btn img {
+            filter: none; /* Kein Filter für die Originalfarbe */
+            fill: rgb(230, 37, 46); /* Setze die SVG-Füllung auf Rot */
+            stroke: rgb(230, 37, 46); /* Setze die SVG-Linien auf Rot */
+        }
+        .delete-btn:hover img {
+            fill: white; /* SVG wird weiß beim Hover */
+            stroke: white; /* SVG-Linien werden weiß beim Hover */
+        }
+    </style>
+</head>
+<body>
+    <header class="custom-header text-white p-3">
+        <div class="container d-flex justify-content-between align-items-center">
+            <img src="/static/logo.png" alt="Uniper Logo" height="70">
+            <!-- Kein Zahnrad-Symbol, da auf Einstellungsseite -->
+        </div>
+    </header>
+    <div class="container mt-5">
+        <h3>Einstellungen</h3>
+        <form method="POST" id="settingsForm">
+            <div class="mb-3">
+                <label for="max_mappen">Max. Mappen</label>
+                <input type="number" class="form-control" id="max_mappen" name="max_mappen" value="{{ max_mappen }}">
+            </div>
+            <h5>Orte verwalten</h5>
+            <ul class="list-group mb-3">
+                {% for ort in orte %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        {{ ort.name }}
+                        <button type="button" class="btn btn-sm delete-btn" onclick="showDeleteModal('ort', '{{ ort.id }}')">
+                            <img src="/static/muell.svg" alt="Löschen" width="20">
+                        </button>
+                    </li>
+                {% endfor %}
+            </ul>
+            <div class="mb-3">
+                <input type="text" class="form-control" id="new_ort_input" placeholder="Neuen Ort eingeben und Enter drücken">
+                <ul id="new_orte_list" class="new-entry-list mt-2"></ul>
+            </div>
+            
+            <h5>Firmen verwalten</h5>
+            <ul class="list-group mb-3">
+                {% for firma in firmen %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        {{ firma.name }}
+                        <button type="button" class="btn btn-sm delete-btn" onclick="showDeleteModal('firma', '{{ firma.id }}')">
+                            <img src="/static/muell.svg" alt="Löschen" width="20">
+                        </button>
+                    </li>
+                {% endfor %}
+            </ul>
+            <div class="mb-3">
+                <input type="text" class="form-control" id="new_firma_input" placeholder="Neue Firma eingeben und Enter drücken">
+                <ul id="new_firmen_list" class="new-entry-list mt-2"></ul>
+            </div>
+            
+            <div class="d-flex justify-content-between mt-3">
+                <button type="submit" class="btn btn-uniper">Speichern</button>
+                <a href="/" class="btn btn-uniper-outline-secondary">Zurück</a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Modal für Lösch-Bestätigung -->
+    <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteModalLabel">Löschen bestätigen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Wirklich löschen?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Nein</button>
+                    <button type="button" class="btn btn-danger" id="confirmDelete">Ja</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let deleteType = null;  // 'ort' oder 'firma'
+        let deleteId = null;  // ID des zu löschenden Eintrags
+
+        function showDeleteModal(type, id) {
+            deleteType = type;
+            deleteId = id;
+            const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+            modal.show();
+        }
+
+        document.getElementById('confirmDelete').addEventListener('click', function() {
+            if (deleteType && deleteId) {
+                const form = document.getElementById('settingsForm');
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = deleteType === 'ort' ? 'delete_ort' : 'delete_firma';
+                input.value = deleteId;
+                form.appendChild(input);
+                form.submit();  // Submit formt, um POST zu senden
+            }
+            const modal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
+            modal.hide();
+        });
+
+        const newOrte = [];
+        const newFirmen = [];
+
+        document.getElementById('new_ort_input').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const value = this.value.trim();
+                if (value && !newOrte.includes(value)) {
+                    newOrte.push(value);
+                    addNewEntry('new_orte_list', value, 'ort');
+                }
+                this.value = '';
+            }
+        });
+
+        document.getElementById('new_firma_input').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const value = this.value.trim();
+                if (value && !newFirmen.includes(value)) {
+                    newFirmen.push(value);
+                    addNewEntry('new_firmen_list', value, 'firma');
+                }
+                this.value = '';
+            }
+        });
+
+        function addNewEntry(listId, value, type) {
+            const list = document.getElementById(listId);
+            const li = document.createElement('li');
+            li.innerHTML = `
+                ${value}
+                <button type="button" class="btn btn-sm delete-btn" onclick="removeEntry('${listId}', '${value}', '${type}')">
+                    <img src="/static/muell.svg" alt="Löschen" width="20">
+                </button>
+            `;
+            list.appendChild(li);
+        }
+
+        function removeEntry(listId, value, type) {
+            const list = document.getElementById(listId);
+            const items = Array.from(list.children);
+            const itemToRemove = items.find(li => li.textContent.trim().startsWith(value));
+            if (itemToRemove) {
+                list.removeChild(itemToRemove);
+                if (type === 'ort') {
+                    newOrte.splice(newOrte.indexOf(value), 1);
+                } else if (type === 'firma') {
+                    newFirmen.splice(newFirmen.indexOf(value), 1);
+                }
+            }
+        }
+
+        document.getElementById('settingsForm').addEventListener('submit', function(e) {
+            // Füge versteckte Inputs für alle neuen Einträge hinzu
+            newOrte.forEach(ort => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'new_ort';
+                input.value = ort;
+                this.appendChild(input);
+            });
+            newFirmen.forEach(firma => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'new_firma';
+                input.value = firma;
+                this.appendChild(input);
+            });
+        });
+    </script>
+</body>
+</html>

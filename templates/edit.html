@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Bearbeiten</title>
+    <link href="/static/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="/static/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="/static/bootstrap-icons.css">
+    <style>
+        .custom-header {
+            background-color: rgb(0, 120, 220);
+        }
+        .btn-uniper {
+            background-color: rgb(0, 120, 220);
+            border-color: rgb(0, 120, 220);
+            color: white;
+        }
+        .btn-uniper:hover {
+            background-color: rgb(0, 100, 200);
+            border-color: rgb(0, 100, 200);
+            color: white;
+        }
+        .btn-outline-uniper {
+            color: white;
+            border-color: white;
+        }
+        .btn-outline-uniper:hover {
+            background-color: rgb(0, 120, 220);
+            color: white;
+        }
+        .btn-uniper-outline-secondary {
+            color: rgb(0, 120, 220);
+            border-color: rgb(0, 120, 220);
+        }
+        .btn-uniper-outline-secondary:hover {
+            background-color: rgb(0, 120, 220);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <header class="custom-header text-white p-3">
+        <div class="container d-flex justify-content-between align-items-center">
+            <img src="/static/logo.png" alt="Uniper Logo" height="70">
+            <a href="/einstellungen" class="btn btn-outline-uniper">
+                <img src="/static/setting.svg" alt="Einstellungen" width="24" style="filter: brightness(0) invert(1);">
+            </a>
+        </div>
+    </header>
+    <div class="container mt-5">
+        <h3>Schein bearbeiten</h3>
+        <form id="editForm">
+            <div class="mb-3">
+                <label for="ae_nummer">AE Nummer</label>
+                <input type="text" class="form-control" id="ae_nummer" name="ae_nummer" value="{{ schein.ae_nummer }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="personen">Anzahl Mitarbeiter</label>
+                <input type="number" class="form-control" id="personen" name="personen" value="{{ schein.personen }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="telefonnummer">Telefonnummer</label>
+                <input type="text" class="form-control" id="telefonnummer" name="telefonnummer" value="{{ schein.telefonnummer }}">
+            </div>
+            <div class="mb-3">
+                <label for="ort">Ort</label>
+                <select class="form-select" id="ort" name="ort">
+                    <option value="{{ schein.ort }}">{{ schein.ort }}</option>
+                    {% for o in orte %}
+                        {% if o != schein.ort %}
+                            <option value="{{ o }}">{{ o }}</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+                <input type="text" class="form-control mt-2" id="new_ort" name="new_ort" placeholder="Oder neu hinzufügen...">
+            </div>
+            <div class="mb-3">
+                <label for="firma">Firma</label>
+                <select class="form-select" id="firma" name="firma">
+                    <option value="{{ schein.firma }}">{{ schein.firma }}</option>
+                    {% for f in firmen %}
+                        {% if f != schein.firma %}
+                            <option value="{{ f }}">{{ f }}</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+                <input type="text" class="form-control mt-2" id="new_firma" name="new_firma" placeholder="Oder neu hinzufügen...">
+            </div>
+            <div class="mb-3">
+                <label for="bemerkung">Bemerkung</label>
+                <textarea class="form-control" id="bemerkung" name="bemerkung" rows="3" placeholder="Optionale Bemerkung">{{ schein.bemerkung }}</textarea>
+            </div>
+            <button type="submit" class="btn btn-uniper">Speichern</button>
+            <a href="/" class="btn btn-uniper-outline-secondary">Abbrechen</a>
+        </form>
+    </div>
+    <script>
+        document.getElementById('editForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            fetch('/edit/{{ schein.id }}', {
+                method: 'POST',
+                body: formData
+            }).then(res => res.json())
+            .then(data => {
+                if (data.message) {
+                    window.location.href = '/';
+                } else {
+                    alert('Fehler beim Bearbeiten!');
+                }
+            }).catch(error => console.error('Fehler beim Bearbeiten:', error));
+        });
+    </script>
+</body>
+</html>

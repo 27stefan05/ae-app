@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Arbeitsschein Verwaltung</title>
+    <link href="/static/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="/static/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="/static/bootstrap-icons.css">
+    <style>
+        .custom-header {
+            background-color: rgb(0, 120, 220);
+        }
+        .btn-uniper {
+            background-color: rgb(0, 120, 220);
+            border-color: rgb(0, 120, 220);
+            color: white;
+        }
+        .btn-uniper:hover {
+            background-color: rgb(0, 100, 200); /* Dunklerer Ton beim Hover */
+            border-color: rgb(0, 100, 200);
+            color: white;
+        }
+        .btn-outline-uniper {
+            color: white; /* Weißer Text für Header-Button */
+            border-color: white; /* Weißer Rand */
+        }
+        .btn-outline-uniper:hover {
+            background-color: rgb(19, 91, 139); /* Uniper-Blau beim Hover */
+            color: white;
+            border-color: white;
+        }
+        .btn-uniper-outline-secondary {
+            color: white; /* Weißer Text */
+            border-color: rgb(0, 120, 220); /* Uniper-Blau als Rand */
+            background-color: rgb(0, 120, 220); /* Blauer Hintergrund */
+        }
+        .btn-uniper-outline-secondary:hover {
+            background-color: rgb(19, 91, 139); /* Dunklerer Blauton beim Hover */
+            color: white;
+            border-color: rgb(19, 91, 139);
+        }
+        .btn-uniper-outline-secondary img {
+            filter: brightness(0) invert(1); /* Macht das SVG weiß */
+        }
+        .btn-outline-warning {
+            background-color: rgb(255, 234, 0);
+            color: black;
+            border-color: rgb(255, 234, 0);
+        }
+        .btn-outline-warning:hover {
+            background-color: rgb(237,140,28); /* Etwas dunkleres Gelb beim Hover */
+            color: black;
+            border-color: rgb(237,140,28);
+        }
+        .btn-outline-warning img {
+            filter: brightness(0); /* Macht das SVG schwarz */
+        }
+        .btn-outline-danger {
+            background-color: rgb(230, 37, 46); /* Uniper-Rot als Hintergrund */
+            color: white; /* Weißer Text */
+            border-color: rgb(230, 37, 46); /* Uniper-Rot als Rand */
+        }
+        .btn-outline-danger:hover {
+            background-color: rgb(200, 30, 40); /* Dunkleres Rot beim Hover */
+            color: white;
+            border-color: rgb(200, 30, 40);
+        }
+        .btn-outline-danger img {
+            filter: brightness(0) invert(1); /* Macht das SVG weiß */
+        }
+        .btn-outline-success {
+            background-color: rgb(0, 148, 74); /* Grüner Hintergrund */
+            color: white; /* Weißer Text */
+            border-color: rgb(0, 148, 74); /* Grüner Rand */
+        }
+        .btn-outline-success:hover {
+            background-color: rgb(0, 120, 60); /* Dunkleres Grün beim Hover */
+            color: white;
+            border-color: rgb(0, 120, 60);
+        }
+        .btn-outline-success img {
+            filter: brightness(0) invert(1); /* Macht das SVG weiß */
+        }
+        .main-info {
+            font-size: 1.1em;
+        }
+        .secondary-info {
+            font-size: 0.9em; /* Kleinere Schriftgröße */
+        }
+        .no-results {
+            text-align: center;
+            color: gray;
+            padding: 10px;
+        }
+        .bemerkung-info {
+            font-size: 1em; /* Größer als zuvor (0.8em) */
+            color: rgb(230, 37, 46); /* Rot, wie gewünscht */
+        }
+        .custom-action-btn {
+            height: 45px; /* Anpassung nach deiner Eingabe */
+            width: 90px; /* Anpassung nach deiner Eingabe */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 5px;
+            font-size: 0.8em; /* Kleinere Schrift für Text */
+            margin-right: 5px; /* Abstand zwischen Buttons */
+        }
+        .custom-action-btn img {
+            margin-bottom: 2px; /* Abstand zwischen SVG und Text */
+        }
+        .button-group {
+            display: flex;
+            justify-content: flex-start; /* Buttons nebeneinander */
+            align-items: center;
+            flex-wrap: nowrap; /* Verhindert Umbruch */
+        }
+        .mappe-number {
+            font-size: 3em; /* Groß und fett für die Mappe */
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body onload="loadAllScheine()">
+    <header class="custom-header text-white p-3">
+        <div class="container d-flex justify-content-between align-items-center">
+            <img src="/static/logo.png" alt="Uniper Logo" height="70">
+            <a href="/einstellungen" class="btn btn-outline-uniper">
+                <img src="/static/setting.svg" alt="Einstellungen" width="24" style="filter: brightness(0) invert(1);">
+            </a>
+        </div>
+    </header>
+    <div class="container mt-5">
+        <h3 class="text-center">Bitte AE Nummer eingeben</h3>
+        <div class="input-group mb-3">
+            <button class="btn btn-uniper-outline-secondary" onclick="resetInput()">
+                <img src="/static/update.svg" alt="Zurücksetzen" width="20">
+            </button>
+            <input type="text" id="ae_nummer" class="form-control" placeholder="AE Nummer" oninput="limitInput(this); filterListe();" autofocus maxlength="8">
+            <button class="btn btn-uniper-outline-secondary custom-action-btn" onclick="showAusgebenModal()">
+                <img src="/static/plus.svg" alt="Ausgeben" width="20">
+                <span>Hinzufügen</span>
+            </button>
+        </div>
+        <h4 class="mt-4 mb-2 text-center">Aktuell ausgegebene AE</h4> <!-- Text wieder eingefügt -->
+        <div id="liste" class="list-group"></div>
+        <button class="btn btn-uniper w-100 mt-3" onclick="window.location.href='/uebersicht'">Übersicht</button>
+    </div>
+
+    <!-- Modal für Lösch-Bestätigung -->
+    <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteModalLabel">Löschen bestätigen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Wirklich löschen?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Nein</button>
+                    <button type="button" class="btn btn-danger" id="confirmDelete">Ja</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal für Ausgeben-Bestätigung -->
+    <div class="modal fade" id="ausgebenModal" tabindex="-1" aria-labelledby="ausgebenModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="ausgebenModalLabel">Ausgeben bestätigen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Bitte geben Sie eine AE Nummer ein, um fortzufahren.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="button" class="btn btn-primary" id="confirmAusgeben">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal für Status-Änderung -->
+    <div class="modal fade" id="statusModal" tabindex="-1" aria-labelledby="statusModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header text-center">
+                    <h5 class="modal-title" id="statusModalLabel">Status ändern</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    AE Nummer: <span id="statusAeNummer"></span><br>
+                    <span class="mappe-number">Mappe:</span> <span id="statusMappe" class="mappe-number"></span>
+                </div>
+                <div class="modal-footer text-center">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="button" class="btn btn-primary" id="confirmStatusChange">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allScheine = [];  // Speichert alle Scheine
+        let deleteId = null;  // Speichert die ID zum Löschen
+        let statusId = null;  // Speichert ID für Status-Änderung
+        let statusTarget = null;  // Speichert den neuen Status
+
+        function loadAllScheine() {
+            fetch('/scheine')
+                .then(res => res.json())
+                .then(data => {
+                    allScheine = data;
+                    showAusgegeben();  // Initial nur 'ausgegeben' zeigen
+                });
+        }
+
+        function showAusgegeben() {
+            renderListe(allScheine.filter(s => s.status === 'ausgegeben'));
+        }
+
+        function filterListe() {
+            const search = document.getElementById('ae_nummer').value.toLowerCase();
+            if (search === '') {
+                showAusgegeben();  // Wenn leer, nur 'ausgegeben' zeigen
+            } else {
+                const filtered = allScheine.filter(s => s.ae_nummer.toLowerCase().includes(search));
+                renderListe(filtered);  // Bei Suche alle zeigen
+            }
+        }
+
+        function renderListe(data) {
+            const liste = document.getElementById('liste');
+            liste.innerHTML = '';
+            if (data.length === 0) {
+                const noResults = document.createElement('div');
+                noResults.className = 'list-group-item no-results';
+                noResults.textContent = 'Es wurde kein Arbeitsschein gefunden. Bitte fügen Sie einen hinzu.';
+                liste.appendChild(noResults);
+                return;
+            }
+            data.forEach(s => {
+                const item = document.createElement('div');
+                item.className = 'list-group-item d-flex justify-content-between align-items-center bg-light';
+                let statusButtons = '';
+                if (s.status === 'ausgegeben') {
+                    statusButtons = `<div class="button-group">
+                        <button class="btn btn-sm btn-outline-warning custom-action-btn me-1" onclick="showStatusModal(${s.id}, 'zurueckgegeben', '${s.ae_nummer}', ${s.fach})">
+                            <img src="/static/pause.svg" alt="Zurück nehmen" width="20">
+                            <span>Unterbrechung</span>
+                        </button>
+                        <button class="btn btn-sm btn-uniper-outline-secondary custom-action-btn me-1" onclick="window.location.href='/edit/${s.id}'">
+                            <img src="/static/stift.svg" alt="Bearbeiten" width="20">
+                            <span>Bearbeiten</span>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger custom-action-btn" onclick="showDeleteModal(${s.id})">
+                            <img src="/static/muell.svg" alt="Löschen" width="20">
+                            <span>Fertig</span>
+                        </button>
+                    </div>`;
+                } else if (s.status === 'zurueckgegeben') {
+                    statusButtons = `<div class="button-group">
+                        <button class="btn btn-sm btn-outline-success custom-action-btn me-1" onclick="showStatusModal(${s.id}, 'ausgegeben', '${s.ae_nummer}', ${s.fach})">
+                            <img src="/static/helm.svg" alt="Ausgeben" width="20">
+                            <span>In Arbeit</span>
+                        </button>
+                        <button class="btn btn-sm btn-uniper-outline-secondary custom-action-btn me-1" onclick="window.location.href='/edit/${s.id}'">
+                            <img src="/static/stift.svg" alt="Bearbeiten" width="20">
+                            <span>Bearbeiten</span>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger custom-action-btn" onclick="showDeleteModal(${s.id})">
+                            <img src="/static/muell.svg" alt="Löschen" width="20">
+                            <span>Fertig</span>
+                        </button>
+                    </div>`;
+                }
+                let bemerkungHtml = '';
+                if (s.bemerkung) {
+                    bemerkungHtml = `<div class="bemerkung-info mt-1"><strong>Bemerkung:</strong> ${s.bemerkung}</div>`;
+                }
+                item.innerHTML = `
+                    <div>
+                        <div class="main-info mb-1">
+                            <strong>AE Nummer:</strong> ${s.ae_nummer} | <strong>Mappe:</strong> ${s.fach}
+                        </div>
+                        <div class="secondary-info">
+                            <span class="me-2"><strong>Firma:</strong> ${s.firma || 'N/A'}</span>
+                            <span class="me-2"><strong>Mitarbeiter:</strong> ${s.personen || 'N/A'}</span>
+                            <span class="me-2"><strong>Telefonnummer:</strong> ${s.telefonnummer || 'N/A'}</span>
+                            <span><strong>Ort:</strong> ${s.ort || 'N/A'}</span>
+                        </div>
+                        ${bemerkungHtml}
+                    </div>
+                    <div>
+                        ${statusButtons}
+                    </div>
+                `;
+                liste.appendChild(item);
+            });
+        }
+
+        function showStatusModal(id, newStatus, aeNummer, mappe) {
+            document.getElementById('statusAeNummer').textContent = aeNummer;
+            document.getElementById('statusMappe').textContent = mappe;
+            statusId = id;
+            statusTarget = newStatus;
+            const modal = new bootstrap.Modal(document.getElementById('statusModal'));
+            modal.show();
+        }
+
+        document.getElementById('confirmStatusChange').addEventListener('click', function() {
+            if (statusId && statusTarget) {
+                changeStatus(statusId, statusTarget).then(() => {
+                    statusId = null;
+                    statusTarget = null;
+                    loadAllScheine(); // Liste aktualisieren
+                }).catch(error => console.error('Fehler bei Statusänderung:', error));
+            }
+            const modal = bootstrap.Modal.getInstance(document.getElementById('statusModal'));
+            modal.hide();
+        });
+
+        function showDeleteModal(id) {
+            deleteId = id;
+            const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+            modal.show();
+        }
+
+        document.getElementById('confirmDelete').addEventListener('click', function() {
+            if (deleteId) {
+                fetch(`/delete/${deleteId}`, {method: 'DELETE'}).then(() => {
+                    loadAllScheine();
+                    deleteId = null;
+                });
+                const modal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
+                modal.hide();
+            }
+        });
+
+        function showAusgebenModal() {
+            const ae_nummer = document.getElementById('ae_nummer').value.trim();
+            if (!ae_nummer) {
+                const modal = new bootstrap.Modal(document.getElementById('ausgebenModal'));
+                modal.show();
+                return;
+            }
+            window.location.href = `/eingabe?ae_nummer=${encodeURIComponent(ae_nummer)}`;
+        }
+
+        document.getElementById('confirmAusgeben').addEventListener('click', function() {
+            const ae_nummer = document.getElementById('ae_nummer').value.trim();
+            if (ae_nummer) {
+                window.location.href = `/eingabe?ae_nummer=${encodeURIComponent(ae_nummer)}`;
+            }
+            const modal = bootstrap.Modal.getInstance(document.getElementById('ausgebenModal'));
+            modal.hide();
+        });
+
+        function changeStatus(id, status) {
+            return fetch(`/status/${id}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({status})
+            }).then(response => {
+                if (!response.ok) throw new Error('Statusänderung fehlgeschlagen: ' + response.statusText);
+                return response.json();
+            }).then(() => {
+                console.log('Status geändert');
+            }).catch(error => {
+                console.error('Fehler bei Statusänderung:', error);
+            });
+        }
+
+        function ausgeben() {
+            // Diese Funktion wird nicht mehr direkt aufgerufen, sondern über Modal
+        }
+
+        function resetInput() {
+            document.getElementById('ae_nummer').value = '';
+            filterListe();
+        }
+
+        // Funktion zur Eingabe-Beschränkung
+        function limitInput(input) {
+            let value = input.value.replace(/[^0-9]/g, ''); // Erlaubt nur Zahlen
+            if (value.length > 8) {
+                value = value.slice(0, 8); // Begrenzt auf 8 Stellen
+            }
+            input.value = value;
+        }
+    </script>
+</body>
+</html>
