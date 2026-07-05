@@ -86,6 +86,16 @@ const uniperColors = ['#0476D9', '#5f2176', '#ee7203', '#00733f', '#002d5a', '#8
 
 let allScheine = [];
 
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function loadAllScheine() {
     fetch('/scheine')
         .then(res => res.json())
@@ -110,16 +120,16 @@ function renderScheineListe(filteredScheine) {
         return;
     }
 
-    filteredScheine.forEach((s, index) => {
+    const html = filteredScheine.map((s, index) => {
         const color = uniperColors[index % uniperColors.length];
         const isActive = s.status === 'ausgegeben' || s.status === 'in arbeit';
 
-        const itemHTML = `
-        <div class="list-group-item list-group-item-action p-0 mb-2 border rounded">
-            
+        return `
+        <div class="list-group-item list-group-item-action p-0 mb-2 border rounded" data-id="${s.id}">
+
             <!-- Farbige Zeile oben -->
             <div style="background-color: ${color}; color: white; border-radius: 6px 6px 0 0;" class="px-3 py-2">
-                <strong>AE ${s.ae_nummer}</strong> &nbsp;&nbsp;
+                <strong>AE ${escapeHtml(s.ae_nummer)}</strong> &nbsp;&nbsp;
                 <span>Vorgang ${s.vorgang}</span> &nbsp;&nbsp;
                 <span>Mappe ${s.fach}</span>
             </div>
@@ -127,36 +137,53 @@ function renderScheineListe(filteredScheine) {
             <!-- Info-Zeile -->
             <div class="px-3 py-2">
                 <div class="small">
-                    <strong>Firma:</strong> ${s.firma || '-'} &nbsp;&nbsp;
-                    <strong>Ort:</strong> ${s.ort || '-'} &nbsp;&nbsp;
+                    <strong>Firma:</strong> ${escapeHtml(s.firma) || '-'} &nbsp;&nbsp;
+                    <strong>Ort:</strong> ${escapeHtml(s.ort) || '-'} &nbsp;&nbsp;
                     <strong>Mitarbeiter:</strong> ${s.personen} &nbsp;&nbsp;
-                    <strong>Telefon:</strong> ${s.telefonnummer || '-'}
+                    <strong>Telefon:</strong> ${escapeHtml(s.telefonnummer) || '-'}
                 </div>
-                ${s.bemerkung ? `<div class="mt-1 text-danger small"><strong>Bemerkung:</strong> ${s.bemerkung}</div>` : ''}
+                ${s.bemerkung ? `<div class="mt-1 text-danger small"><strong>Bemerkung:</strong> ${escapeHtml(s.bemerkung)}</div>` : ''}
             </div>
 
             <!-- Buttons -->
             <div class="px-3 pb-2 d-flex justify-content-end gap-2">
-                ${isActive 
-                    ? `<button onclick="showStatusModal(${s.id}, 'zurueckgegeben', '${s.ae_nummer}', ${s.vorgang})" class="btn btn-sm btn-outline-warning text-dark">
+                ${isActive
+                    ? `<button data-action="status" data-newstatus="zurueckgegeben" class="btn btn-sm btn-outline-warning text-dark">
                         <img src="/static/pause.svg" height="18"> Unterbrechung
                        </button>`
-                    : `<button onclick="showStatusModal(${s.id}, 'in arbeit', '${s.ae_nummer}', ${s.vorgang})" class="btn btn-sm btn-outline-success">
+                    : `<button data-action="status" data-newstatus="in arbeit" class="btn btn-sm btn-outline-success">
                         <img src="/static/helm.svg" height="18"> In Arbeit
                        </button>`
                 }
-                <button onclick="location.href='/edit/${s.id}'" class="btn btn-sm btn-outline-primary">
+                <button data-action="edit" class="btn btn-sm btn-outline-primary">
                     <img src="/static/stift.svg" height="18"> Bearbeiten
                 </button>
-                <button onclick="showDeleteModal(${s.id}, '${s.ae_nummer}', ${s.vorgang})" class="btn btn-sm btn-outline-danger">
+                <button data-action="delete" class="btn btn-sm btn-outline-danger">
                     <img src="/static/muell.svg" height="18"> Löschen
                 </button>
             </div>
         </div>`;
+    }).join('');
 
-        container.innerHTML += itemHTML;
-    });
+    container.innerHTML = html;
 }
+
+document.getElementById('scheineListe').addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const item = btn.closest('[data-id]');
+    const id = parseInt(item.dataset.id, 10);
+    const schein = allScheine.find(s => s.id === id);
+    if (!schein) return;
+
+    if (btn.dataset.action === 'status') {
+        showStatusModal(id, btn.dataset.newstatus, schein.ae_nummer, schein.vorgang);
+    } else if (btn.dataset.action === 'edit') {
+        location.href = `/edit/${id}`;
+    } else if (btn.dataset.action === 'delete') {
+        showDeleteModal(id, schein.ae_nummer, schein.vorgang);
+    }
+});
 
 function filterListe() {
     const searchValue = document.getElementById('ae_nummer').value.trim().toLowerCase();
@@ -182,7 +209,7 @@ function showStatusModal(id, newStatus, aeNummer, vorgang) {
     const actionText = newStatus === 'zurueckgegeben' ? 'Unterbrechung' : 'In Arbeit';
     
     document.getElementById('statusModalBody').innerHTML = `
-        <p>Schein <strong>AE ${aeNummer} (Vorgang ${vorgang})</strong></p>
+        <p>Schein <strong>AE ${escapeHtml(aeNummer)} (Vorgang ${vorgang})</strong></p>
         <p>Status wirklich auf <strong>${actionText}</strong> setzen?</p>
     `;
     
@@ -205,7 +232,7 @@ function showStatusModal(id, newStatus, aeNummer, vorgang) {
 
 function showDeleteModal(id, aeNummer, vorgang) {
     document.getElementById('deleteModalBody').innerHTML = `
-        <p>Möchten Sie den Schein <strong>AE ${aeNummer} (Vorgang ${vorgang})</strong> wirklich löschen?</p>
+        <p>Möchten Sie den Schein <strong>AE ${escapeHtml(aeNummer)} (Vorgang ${vorgang})</strong> wirklich löschen?</p>
         <p class="text-danger">Diese Aktion kann nicht rückgängig gemacht werden.</p>
     `;
     const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
