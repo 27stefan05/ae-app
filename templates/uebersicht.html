@@ -49,27 +49,37 @@
 
 <!-- ===================== JAVASCRIPT ===================== -->
 <script>
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 $(document).ready(function() {
-    $('#uebersichtTable').DataTable({
+    const table = $('#uebersichtTable').DataTable({
         ajax: {
             url: '/scheine',
             dataSrc: ''
         },
         columns: [
-            { data: 'ae_nummer' },
-            { 
-                data: 'vorgang', 
+            { data: 'ae_nummer', render: (data) => escapeHtml(data) },
+            {
+                data: 'vorgang',
                 render: function(data) {
                     return data ? data : '';
                 }
             },
             { data: 'fach' },
-            { data: 'firma' },
-            { data: 'ort' },
+            { data: 'firma', render: (data) => escapeHtml(data) },
+            { data: 'ort', render: (data) => escapeHtml(data) },
             { data: 'personen' },
-            { data: 'telefonnummer' },
-            { 
-                data: 'status', 
+            { data: 'telefonnummer', render: (data) => escapeHtml(data) },
+            {
+                data: 'status',
                 render: function(data) {
                     if (data === 'ausgegeben' || data === 'in arbeit') {
                         return '<span class="badge bg-success">In Arbeit</span>';
@@ -78,17 +88,17 @@ $(document).ready(function() {
                     }
                 }
             },
-            { data: 'bemerkung' },
+            { data: 'bemerkung', render: (data) => escapeHtml(data) },
             {
                 data: 'id',
-                render: function(data, type, row) {
+                render: function(data) {
                     return `
                         <div class="d-flex gap-1">
-                            <button onclick="window.location.href='/edit/${data}'" 
+                            <button data-action="edit" data-id="${data}"
                                     class="btn btn-outline-primary btn-sm p-1" style="width:32px; height:32px;">
                                 <img src="/static/stift.svg" height="16">
                             </button>
-                            <button onclick="deleteSchein(${data}, '${row.ae_nummer}', ${row.vorgang})" 
+                            <button data-action="delete" data-id="${data}"
                                     class="btn btn-outline-danger btn-sm p-1" style="width:32px; height:32px;">
                                 <img src="/static/muell.svg" height="16">
                             </button>
@@ -118,29 +128,38 @@ $(document).ready(function() {
         responsive: true
     });
 
+    // Buttons in der Aktionen-Spalte (Event-Delegation statt inline onclick)
+    $('#uebersichtTable tbody').on('click', '[data-action]', function() {
+        const id = $(this).data('id');
+        const row = table.row($(this).closest('tr')).data();
+        if ($(this).data('action') === 'edit') {
+            window.location.href = `/edit/${id}`;
+        } else if ($(this).data('action') === 'delete') {
+            deleteSchein(id, row.ae_nummer, row.vorgang);
+        }
+    });
+
     // PDF-Button Funktionalität
     document.getElementById('generatePdfBtn').addEventListener('click', function() {
         const btn = this;
         const originalText = btn.innerHTML;
-        
+
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Wird erzeugt...';
-        
+
         fetch('/generate_pdf_now', { method: 'POST' })
             .then(res => res.json())
             .then(data => {
-                if (data.success) {
-                    const downloadBtn = document.getElementById('downloadPdfBtn');
-                    downloadBtn.href = `/static/${data.filename}`;
-                    downloadBtn.style.display = 'inline-block';
-                    
-                    btn.innerHTML = '<i class="bi bi-check-circle me-2"></i> Fertig!';
-                    
-                    setTimeout(() => {
-                        btn.innerHTML = originalText;
-                        btn.disabled = false;
-                    }, 2500);
-                }
+                const downloadBtn = document.getElementById('downloadPdfBtn');
+                downloadBtn.href = `/static/${data.filename}`;
+                downloadBtn.style.display = 'inline-block';
+
+                btn.innerHTML = '<i class="bi bi-check-circle me-2"></i> Fertig!';
+
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }, 2500);
             })
             .catch(() => {
                 alert('Fehler beim Erzeugen der PDF!');
@@ -148,21 +167,21 @@ $(document).ready(function() {
                 btn.disabled = false;
             });
     });
-});
 
-function deleteSchein(id, ae, vorgang) {
-    if (!confirm(`Möchtest du AE ${ae} (Vorgang ${vorgang}) wirklich löschen?`)) {
-        return;
+    function deleteSchein(id, ae, vorgang) {
+        if (!confirm(`Möchtest du AE ${ae} (Vorgang ${vorgang}) wirklich löschen?`)) {
+            return;
+        }
+
+        fetch(`/delete/${id}`, { method: 'DELETE' })
+            .then(response => {
+                if (response.ok) {
+                    table.ajax.reload();
+                } else {
+                    alert('Fehler beim Löschen!');
+                }
+            });
     }
-    
-    fetch(`/delete/${id}`, { method: 'DELETE' })
-        .then(response => {
-            if (response.ok) {
-                $('#uebersichtTable').DataTable().ajax.reload();
-            } else {
-                alert('Fehler beim Löschen!');
-            }
-        });
-}
+});
 </script>
 {% endblock %}

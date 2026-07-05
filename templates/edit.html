@@ -7,6 +7,10 @@
 
     <h4 class="mb-4">Arbeitsschein bearbeiten</h4>
 
+    {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
     <form method="POST">
         <input type="hidden" name="id" value="{{ schein.id }}">
 
@@ -53,7 +57,7 @@
                             <select name="firma" class="form-select" id="firmaSelect">
                                 <option value="">-- Firma auswählen --</option>
                                 {% for firma in firmen %}
-                                <option value="{{ firma.name }}" {{ 'selected' if firma.name == schein.firma else '' }}>
+                                <option value="{{ firma.name }}" {{ 'selected' if firma.name == selected_firma else '' }}>
                                     {{ firma.name }}
                                 </option>
                                 {% endfor %}
@@ -74,7 +78,7 @@
                             <select name="ort" class="form-select" id="ortSelect">
                                 <option value="">-- Ort auswählen --</option>
                                 {% for ort in orte %}
-                                <option value="{{ ort.name }}" {{ 'selected' if ort.name == schein.ort else '' }}>
+                                <option value="{{ ort.name }}" {{ 'selected' if ort.name == selected_ort else '' }}>
                                     {{ ort.name }}
                                 </option>
                                 {% endfor %}
