@@ -5,50 +5,36 @@
 {% block content %}
 <div class="container-fluid px-4 py-4">
 
+    <!-- Suchleiste -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="input-group input-group-lg">
+                <input type="text" id="suchfeld" class="form-control"
+                       placeholder="Suchen nach AE-Nummer, Firma, Ort, Telefon, Bemerkung...">
+            </div>
+        </div>
+    </div>
+
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4 class="mb-0">Alle Arbeitsscheine</h4>
-        
+        <h5 class="text-muted mb-0" id="listeHeader">Alle Arbeitsscheine</h5>
+
         <div class="d-flex gap-2">
-            <!-- Jetzt PDF erzeugen Button -->
             <button id="generatePdfBtn" class="btn btn-primary">
                 <i class="bi bi-file-earmark-pdf me-2"></i> Jetzt PDF erzeugen
             </button>
-            
-            <!-- PDF herunterladen Button -->
             <a href="#" id="downloadPdfBtn" class="btn btn-outline-primary" style="display: none;" download>
                 <i class="bi bi-download me-2"></i> PDF herunterladen
             </a>
         </div>
     </div>
 
-    <div class="card shadow-sm">
-        <div class="card-body p-0">
-            <table id="uebersichtTable" class="table table-hover mb-0" style="width:100%">
-                <thead class="table-light">
-                    <tr>
-                        <th>AE-Nummer</th>
-                        <th>Vorgang</th>
-                        <th>Mappe</th>
-                        <th>Firma</th>
-                        <th>Ort</th>
-                        <th>Mitarbeiter</th>
-                        <th>Telefon</th>
-                        <th>Status</th>
-                        <th>Bemerkung</th>
-                        <th style="width: 90px;">Aktionen</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Wird per DataTables befüllt -->
-                </tbody>
-            </table>
-        </div>
-    </div>
+    <div id="scheineListe" class="list-group"></div>
 
 </div>
 
-<!-- ===================== JAVASCRIPT ===================== -->
 <script>
+let allScheine = [];
+
 function escapeHtml(value) {
     if (value === null || value === undefined) return '';
     return String(value)
@@ -59,129 +45,131 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
-$(document).ready(function() {
-    const table = $('#uebersichtTable').DataTable({
-        ajax: {
-            url: '/scheine',
-            dataSrc: ''
-        },
-        columns: [
-            { data: 'ae_nummer', render: (data) => escapeHtml(data) },
-            {
-                data: 'vorgang',
-                render: function(data) {
-                    return data ? data : '';
-                }
-            },
-            { data: 'fach' },
-            { data: 'firma', render: (data) => escapeHtml(data) },
-            { data: 'ort', render: (data) => escapeHtml(data) },
-            { data: 'personen' },
-            { data: 'telefonnummer', render: (data) => escapeHtml(data) },
-            {
-                data: 'status',
-                render: function(data) {
-                    if (data === 'ausgegeben' || data === 'in arbeit') {
-                        return '<span class="badge bg-success">In Arbeit</span>';
-                    } else {
-                        return '<span class="badge bg-secondary">Zurückgegeben</span>';
-                    }
-                }
-            },
-            { data: 'bemerkung', render: (data) => escapeHtml(data) },
-            {
-                data: 'id',
-                render: function(data) {
-                    return `
-                        <div class="d-flex gap-1">
-                            <button data-action="edit" data-id="${data}"
-                                    class="btn btn-outline-primary btn-sm p-1" style="width:32px; height:32px;">
-                                <img src="/static/stift.svg" height="16">
-                            </button>
-                            <button data-action="delete" data-id="${data}"
-                                    class="btn btn-outline-danger btn-sm p-1" style="width:32px; height:32px;">
-                                <img src="/static/muell.svg" height="16">
-                            </button>
-                        </div>
-                    `;
-                }
-            }
-        ],
-        order: [[0, 'asc'], [1, 'asc']],
-        language: {
-            "emptyTable": "Keine Daten in der Tabelle vorhanden",
-            "info": "Zeige _START_ bis _END_ von _TOTAL_ Einträgen",
-            "infoEmpty": "Zeige 0 bis 0 von 0 Einträgen",
-            "infoFiltered": "(gefiltert aus _MAX_ Einträgen)",
-            "lengthMenu": "Zeige _MENU_ Einträge",
-            "loadingRecords": "Lade...",
-            "processing": "Verarbeite...",
-            "search": "Suchen:",
-            "zeroRecords": "Keine passenden Einträge gefunden",
-            "paginate": {
-                "first": "Erste",
-                "last": "Letzte",
-                "next": "Nächste",
-                "previous": "Vorherige"
-            }
-        },
-        responsive: true
-    });
+function statusBadge(status) {
+    if (status === 'ausgegeben' || status === 'in arbeit') {
+        return '<span class="badge bg-success">In Arbeit</span>';
+    }
+    return '<span class="badge bg-secondary">Zurückgegeben</span>';
+}
 
-    // Buttons in der Aktionen-Spalte (Event-Delegation statt inline onclick)
-    $('#uebersichtTable tbody').on('click', '[data-action]', function() {
-        const id = $(this).data('id');
-        const row = table.row($(this).closest('tr')).data();
-        if ($(this).data('action') === 'edit') {
-            window.location.href = `/edit/${id}`;
-        } else if ($(this).data('action') === 'delete') {
-            deleteSchein(id, row.ae_nummer, row.vorgang);
-        }
-    });
+function loadAllScheine() {
+    fetch('/scheine')
+        .then(res => res.json())
+        .then(data => {
+            allScheine = data.slice().sort((a, b) => a.ae_nummer.localeCompare(b.ae_nummer) || a.vorgang - b.vorgang);
+            renderListe();
+        });
+}
 
-    // PDF-Button Funktionalität
-    document.getElementById('generatePdfBtn').addEventListener('click', function() {
-        const btn = this;
-        const originalText = btn.innerHTML;
+function renderListe() {
+    const searchValue = document.getElementById('suchfeld').value.trim().toLowerCase();
+    let filtered = allScheine;
 
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Wird erzeugt...';
+    if (searchValue) {
+        filtered = allScheine.filter(s =>
+            [s.ae_nummer, s.firma, s.ort, s.telefonnummer, s.bemerkung].some(
+                field => (field || '').toLowerCase().includes(searchValue)
+            )
+        );
+        document.getElementById('listeHeader').textContent = `Suchergebnisse für "${searchValue}" (${filtered.length})`;
+    } else {
+        document.getElementById('listeHeader').textContent = `Alle Arbeitsscheine (${filtered.length})`;
+    }
 
-        fetch('/generate_pdf_now', { method: 'POST' })
-            .then(res => res.json())
-            .then(data => {
-                const downloadBtn = document.getElementById('downloadPdfBtn');
-                downloadBtn.href = `/static/${data.filename}`;
-                downloadBtn.style.display = 'inline-block';
+    const container = document.getElementById('scheineListe');
 
-                btn.innerHTML = '<i class="bi bi-check-circle me-2"></i> Fertig!';
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="list-group-item text-center py-5">
+                <p class="text-muted fs-5 mb-0">Keine Arbeitsscheine gefunden</p>
+            </div>
+        `;
+        return;
+    }
 
-                setTimeout(() => {
-                    btn.innerHTML = originalText;
-                    btn.disabled = false;
-                }, 2500);
-            })
-            .catch(() => {
-                alert('Fehler beim Erzeugen der PDF!');
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            });
-    });
+    container.innerHTML = filtered.map(s => `
+        <div class="list-group-item p-0 mb-2 border rounded" data-id="${s.id}">
+            <div class="px-3 py-2 d-flex justify-content-between align-items-center"
+                 style="background-color:#0078DC; color:white; border-radius:6px 6px 0 0;">
+                <div>
+                    <strong>AE ${escapeHtml(s.ae_nummer)}</strong> &nbsp;&nbsp;
+                    <span>Vorgang ${s.vorgang}</span> &nbsp;&nbsp;
+                    <span>Mappe ${s.fach}</span>
+                </div>
+                ${statusBadge(s.status)}
+            </div>
+            <div class="px-3 py-2">
+                <div class="small">
+                    <strong>Firma:</strong> ${escapeHtml(s.firma) || '-'} &nbsp;&nbsp;
+                    <strong>Ort:</strong> ${escapeHtml(s.ort) || '-'} &nbsp;&nbsp;
+                    <strong>Mitarbeiter:</strong> ${s.personen} &nbsp;&nbsp;
+                    <strong>Telefon:</strong> ${escapeHtml(s.telefonnummer) || '-'}
+                </div>
+                ${s.bemerkung ? `<div class="mt-1 text-danger small"><strong>Bemerkung:</strong> ${escapeHtml(s.bemerkung)}</div>` : ''}
+            </div>
+            <div class="px-3 pb-2 d-flex justify-content-end gap-2">
+                <button data-action="edit" class="btn btn-sm btn-outline-primary">
+                    <img src="/static/stift.svg" height="18"> Bearbeiten
+                </button>
+                <button data-action="delete" class="btn btn-sm btn-outline-danger">
+                    <img src="/static/muell.svg" height="18"> Löschen
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
 
-    function deleteSchein(id, ae, vorgang) {
-        if (!confirm(`Möchtest du AE ${ae} (Vorgang ${vorgang}) wirklich löschen?`)) {
-            return;
-        }
+document.getElementById('scheineListe').addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const id = btn.closest('[data-id]').dataset.id;
 
+    if (btn.dataset.action === 'edit') {
+        location.href = `/edit/${id}`;
+    } else if (btn.dataset.action === 'delete') {
+        const schein = allScheine.find(s => String(s.id) === String(id));
+        if (!confirm(`Möchtest du AE ${schein.ae_nummer} (Vorgang ${schein.vorgang}) wirklich löschen?`)) return;
         fetch(`/delete/${id}`, { method: 'DELETE' })
-            .then(response => {
-                if (response.ok) {
-                    table.ajax.reload();
+            .then(res => {
+                if (res.ok) {
+                    loadAllScheine();
                 } else {
                     alert('Fehler beim Löschen!');
                 }
             });
     }
 });
+
+document.getElementById('suchfeld').addEventListener('input', renderListe);
+
+document.getElementById('generatePdfBtn').addEventListener('click', function() {
+    const btn = this;
+    const originalText = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Wird erzeugt...';
+
+    fetch('/generate_pdf_now', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            const downloadBtn = document.getElementById('downloadPdfBtn');
+            downloadBtn.href = `/static/${data.filename}`;
+            downloadBtn.style.display = 'inline-block';
+
+            btn.innerHTML = '<i class="bi bi-check-circle me-2"></i> Fertig!';
+
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }, 2500);
+        })
+        .catch(() => {
+            alert('Fehler beim Erzeugen der PDF!');
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        });
+});
+
+window.onload = loadAllScheine;
 </script>
 {% endblock %}
