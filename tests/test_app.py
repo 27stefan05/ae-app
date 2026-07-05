@@ -119,6 +119,27 @@ def test_edit_invalid_vorgang_shows_error_not_crash(client):
     assert 'Zahl' in resp.get_data(as_text=True)
 
 
+def test_eingabe_accepts_non_multiple_of_ten_vorgang(client):
+    resp = create_schein(client, '50505050', vorgang='11')
+    assert resp.status_code == 302
+    assert client.get('/scheine').get_json()[0]['vorgang'] == 11
+
+
+def test_edit_page_preselects_non_standard_vorgang(client):
+    create_schein(client, '60606060', vorgang='11')
+    schein_id = client.get('/scheine').get_json()[0]['id']
+    body = client.get(f'/edit/{schein_id}').get_data(as_text=True)
+    assert 'value="11"' in body
+
+
+def test_edit_keeps_non_standard_vorgang_when_unchanged(client):
+    create_schein(client, '70707070', vorgang='11')
+    schein_id = client.get('/scheine').get_json()[0]['id']
+    resp = client.post(f'/edit/{schein_id}', data={'personen': '1', 'vorgang': '11'})
+    assert resp.status_code == 302
+    assert client.get('/scheine').get_json()[0]['vorgang'] == 11
+
+
 def test_edit_preselect_creates_and_selects_new_firma(client):
     create_schein(client, '20202020')
     schein_id = client.get('/scheine').get_json()[0]['id']
