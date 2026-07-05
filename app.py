@@ -1,193 +1,268 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, send_from_directory
+from flask import Flask, request, jsonify, render_template, redirect, url_for, send_from_directory, session, flash
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 from flask_migrate import Migrate
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 from apscheduler.schedulers.background import BackgroundScheduler
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from reportlab.lib.units import cm
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///scheine.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'scheine.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.secret_key = 'dein-geheimes-passwort-2026'
+
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
-# Modelle (unverändert)
+# ===================== MODELLE =====================
 class Arbeitsschein(db.Model):
+    __tablename__ = 'arbeitsschein'
     id = db.Column(db.Integer, primary_key=True)
-    ae_nummer = db.Column(db.String(20), nullable=False, unique=True)
+    ae_nummer = db.Column(db.String(20), nullable=False)
     personen = db.Column(db.Integer, default=0)
     firma = db.Column(db.String(100))
     ort = db.Column(db.String(100))
     telefonnummer = db.Column(db.String(20))
-    fach = db.Column(db.Integer, default=0)  # Mappe
+    fach = db.Column(db.Integer, default=0)
     beschreibung = db.Column(db.String(200))
     ausgabedatum = db.Column(db.DateTime, default=datetime.utcnow)
     rueckgabedatum = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.String(20), default='ausgegeben')
     bemerkung = db.Column(db.String(500), nullable=True)
+    vorgang = db.Column(db.Integer, default=10)
+
+    __table_args__ = (db.UniqueConstraint('ae_nummer', 'vorgang', name='_ae_vorgang_uc'),)
 
 class Ort(db.Model):
+    __tablename__ = 'ort'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True)
 
 class Firma(db.Model):
+    __tablename__ = 'firma'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True)
 
 class Setting(db.Model):
+    __tablename__ = 'setting'
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(50), unique=True)
     value = db.Column(db.String(50))
 
-# DB initialisieren & Default-Settings
-with app.app_context():
-    db.create_all()
-    if not Setting.query.filter_by(key='max_mappen').first():
-        db.session.add(Setting(key='max_mappen', value='300'))
-        db.session.commit()
+# ===================== HILFSFUNKTIONEN =====================
+def get_next_fach():
+    used = {s.fach for s in Arbeitsschein.query.all()}
+    max_mappen = 300
+    setting = Setting.query.filter_by(key='max_mappen').first()
+    if setting:
+        max_mappen = int(setting.value)
+    for i in range(1, max_mappen + 1):
+        if i not in used:
+            return i
+    return max_mappen + 1
+
+def get_max_vorgaenge():
+    setting = Setting.query.filter_by(key='max_vorgaenge').first()
+    return int(setting.value) if setting else 200
+
+# ===================== ROUTEN =====================
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/scheine', methods=['GET'])
-def liste():
+@app.route('/scheine')
+def get_scheine():
     scheine = Arbeitsschein.query.all()
     return jsonify([{
         'id': s.id,
         'ae_nummer': s.ae_nummer,
-        'personen': s.personen,
-        'firma': s.firma,
-        'ort': s.ort,
-        'telefonnummer': s.telefonnummer,
+        'vorgang': s.vorgang,
         'fach': s.fach,
-        'beschreibung': s.beschreibung,
-        'ausgabedatum': s.ausgabedatum.isoformat(),
-        'rueckgabedatum': s.rueckgabedatum.isoformat() if s.rueckgabedatum else None,
+        'firma': s.firma or '',
+        'ort': s.ort or '',
+        'personen': s.personen,
+        'telefonnummer': s.telefonnummer or '',
         'status': s.status,
-        'bemerkung': s.bemerkung
+        'bemerkung': s.bemerkung or ''
     } for s in scheine])
 
 @app.route('/eingabe', methods=['GET', 'POST'])
 def eingabe():
+    # Neue Firma/Ort automatisch anlegen, wenn per Redirect übergeben
+    preselect_firma = request.args.get('preselect_firma')
+    if preselect_firma:
+        if not Firma.query.filter_by(name=preselect_firma).first():
+            db.session.add(Firma(name=preselect_firma))
+            db.session.commit()
+
+    preselect_ort = request.args.get('preselect_ort')
+    if preselect_ort:
+        if not Ort.query.filter_by(name=preselect_ort).first():
+            db.session.add(Ort(name=preselect_ort))
+            db.session.commit()
+
     if request.method == 'POST':
-        data = request.json if request.is_json else request.form
-        # Automatische Mappe zuweisen
-        max_mappen = int(Setting.query.filter_by(key='max_mappen').first().value)
-        used_mappen = [s.fach for s in Arbeitsschein.query.all() if s.fach > 0]
-        fach = next((i for i in range(1, max_mappen + 1) if i not in used_mappen), None)
-        if not fach:
-            return jsonify({'error': 'Keine freie Mappe verfügbar!'}), 400
+        data = request.form
+        ae_nummer = data.get('ae_nummer')
+        vorgang = int(data.get('vorgang', 10))
+        personen = int(data.get('personen', 0) or 0)
+        firma = data.get('firma', '')
+        ort = data.get('ort', '')
+        telefonnummer = data.get('telefonnummer', '')
+        fach = int(data.get('fach', get_next_fach()))
+        bemerkung = data.get('bemerkung', '')
 
-        # Neue Ort/Firma hinzufügen, falls angegeben
-        if data.get('new_ort'):
-            new_ort = Ort(name=data['new_ort'])
-            db.session.add(new_ort)
-            db.session.commit()
-            ort = data['new_ort']
-        else:
-            ort = data['ort']
+        if firma and not Firma.query.filter_by(name=firma).first():
+            db.session.add(Firma(name=firma))
+        if ort and not Ort.query.filter_by(name=ort).first():
+            db.session.add(Ort(name=ort))
+        db.session.commit()
 
-        if data.get('new_firma'):
-            new_firma = Firma(name=data['new_firma'])
-            db.session.add(new_firma)
-            db.session.commit()
-            firma = data['new_firma']
-        else:
-            firma = data['firma']
+        existing = Arbeitsschein.query.filter_by(ae_nummer=ae_nummer, vorgang=vorgang).first()
+        if existing:
+            return render_template('eingabe.html', error="Diese AE-Nummer mit diesem Vorgang existiert bereits!",
+                                   max_vorgaenge=get_max_vorgaenge(), next_fach=get_next_fach(),
+                                   orte=Ort.query.order_by(func.lower(Ort.name).asc()).all(),
+                                   firmen=Firma.query.order_by(func.lower(Firma.name).asc()).all())
 
-        neuer_schein = Arbeitsschein(
-            ae_nummer=data['ae_nummer'],
-            personen=int(data['personen']),
+        schein = Arbeitsschein(
+            ae_nummer=ae_nummer,
+            vorgang=vorgang,
+            personen=personen,
             firma=firma,
             ort=ort,
-            telefonnummer=data['telefonnummer'],
+            telefonnummer=telefonnummer,
             fach=fach,
-            bemerkung=data.get('bemerkung', '')
+            bemerkung=bemerkung,
+            status='ausgegeben'
         )
-        db.session.add(neuer_schein)
+        db.session.add(schein)
         db.session.commit()
-        return jsonify({'message': 'Schein gespeichert', 'fach': fach}), 200
 
-    ae_nummer = request.args.get('ae_nummer', '')
-    orte = [o.name for o in Ort.query.order_by(func.lower(Ort.name).asc()).all()]
-    firmen = [f.name for f in Firma.query.order_by(func.lower(Firma.name).asc()).all()]
-    return render_template('eingabe.html', ae_nummer=ae_nummer, orte=orte, firmen=firmen)
+        return redirect('/')
 
-@app.route('/rueckgabe/<int:id>', methods=['PUT'])
-def rueckgabe(id):
-    schein = Arbeitsschein.query.get_or_404(id)
-    schein.rueckgabedatum = datetime.utcnow()
-    schein.status = 'zurueckgegeben'
-    db.session.commit()
-    return jsonify({'message': 'Schein zurückgegeben'})
+    max_vorgaenge = get_max_vorgaenge()
+    next_fach = get_next_fach()
+    orte = Ort.query.order_by(func.lower(Ort.name).asc()).all()
+    firmen = Firma.query.order_by(func.lower(Firma.name).asc()).all()
+    return render_template('eingabe.html', next_fach=next_fach, orte=orte, firmen=firmen, max_vorgaenge=max_vorgaenge)
 
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
-def edit_page(id):
+def edit(id):
     schein = Arbeitsschein.query.get_or_404(id)
-    if request.method == 'POST':
-        data = request.json if request.is_json else request.form
-        # Update Felder
-        schein.ae_nummer = data['ae_nummer']
-        schein.personen = int(data['personen'])
-        schein.telefonnummer = data['telefonnummer']
-        schein.bemerkung = data.get('bemerkung', schein.bemerkung)
-        # Neue Ort/Firma
-        if data.get('new_ort'):
-            new_ort = Ort(name=data['new_ort'])
-            db.session.add(new_ort)
-            db.session.commit()
-            schein.ort = data['new_ort']
-        else:
-            schein.ort = data['ort']
-        if data.get('new_firma'):
-            new_firma = Firma(name=data['new_firma'])
-            db.session.add(new_firma)
-            db.session.commit()
-            schein.firma = data['new_firma']
-        else:
-            schein.firma = data['firma']
-        db.session.commit()
-        return jsonify({'message': 'Schein bearbeitet'}), 200
 
-    orte = [o.name for o in Ort.query.order_by(func.lower(Ort.name).asc()).all()]
-    firmen = [f.name for f in Firma.query.order_by(func.lower(Firma.name).asc()).all()]
-    return render_template('edit.html', schein=schein, orte=orte, firmen=firmen)
+    if request.method == 'POST':
+        data = request.form
+        schein.personen = int(data.get('personen', 0) or 0)
+        schein.firma = data.get('firma', '')
+        schein.ort = data.get('ort', '')
+        schein.telefonnummer = data.get('telefonnummer', '')
+        schein.bemerkung = data.get('bemerkung', '')
+        schein.vorgang = int(data.get('vorgang', schein.vorgang))
+
+        if schein.firma and not Firma.query.filter_by(name=schein.firma).first():
+            db.session.add(Firma(name=schein.firma))
+        if schein.ort and not Ort.query.filter_by(name=schein.ort).first():
+            db.session.add(Ort(name=schein.ort))
+        db.session.commit()
+
+        return redirect('/')
+
+    orte = Ort.query.order_by(func.lower(Ort.name).asc()).all()
+    firmen = Firma.query.order_by(func.lower(Firma.name).asc()).all()
+    max_vorgaenge = get_max_vorgaenge()
+    return render_template('edit.html', schein=schein, orte=orte, firmen=firmen, max_vorgaenge=max_vorgaenge)
+
+@app.route('/status/<int:id>', methods=['PUT'])
+def change_status(id):
+    schein = Arbeitsschein.query.get_or_404(id)
+    data = request.json
+    schein.status = data['status']
+    if data['status'] == 'zurueckgegeben':
+        schein.rueckgabedatum = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'message': 'Status geändert'})
 
 @app.route('/delete/<int:id>', methods=['DELETE'])
-def delete(id):
-    schein = Arbeitsschein.query.get_or_404(id)
+def delete_schein(id):
+    schein = Arbeitsschein.query.get(id)
+    if not schein:
+        return jsonify({'error': 'Arbeitsschein nicht gefunden'}), 404
     db.session.delete(schein)
     db.session.commit()
-    return jsonify({'message': 'Schein gelöscht'})
-
-@app.route('/uebersicht')
-def uebersicht():
-    scheine = Arbeitsschein.query.all()  # Alle Scheine abrufen
-    return render_template('uebersicht.html', scheine=scheine)
+    return jsonify({'message': 'Arbeitsschein erfolgreich gelöscht'})
 
 @app.route('/einstellungen', methods=['GET', 'POST'])
 def einstellungen():
+    if 'logged_in' not in session:
+        return redirect('/login')
+
+    # === Auto-Logout nach 15 Minuten ===
+    if 'last_activity' in session:
+        try:
+            last = datetime.fromisoformat(session['last_activity'])
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            if (now - last).total_seconds() > 900:
+                session.clear()
+                return redirect('/login?timeout=1')
+        except:
+            session.clear()
+            return redirect('/login')
+
+    session['last_activity'] = datetime.now(timezone.utc).isoformat()
+
     if request.method == 'POST':
         data = request.form
+
         if 'max_mappen' in data:
             setting = Setting.query.filter_by(key='max_mappen').first()
-            setting.value = data['max_mappen']
+            if setting:
+                setting.value = data['max_mappen']
             db.session.commit()
 
-        # Multiple Orte hinzufügen
-        new_orte = data.getlist('new_ort')  # Holt alle 'new_ort'-Felder
+        if 'max_vorgaenge' in data:
+            setting = Setting.query.filter_by(key='max_vorgaenge').first()
+            if setting:
+                setting.value = data['max_vorgaenge']
+            db.session.commit()
+
+        # Datei-Import Orte
+        if 'orte_file' in request.files:
+            file = request.files['orte_file']
+            if file and file.filename.endswith('.txt'):
+                content = file.read().decode('utf-8')
+                for line in content.splitlines():
+                    name = line.strip()
+                    if name and not Ort.query.filter_by(name=name).first():
+                        db.session.add(Ort(name=name))
+
+        # Datei-Import Firmen
+        if 'firmen_file' in request.files:
+            file = request.files['firmen_file']
+            if file and file.filename.endswith('.txt'):
+                content = file.read().decode('utf-8')
+                for line in content.splitlines():
+                    name = line.strip()
+                    if name and not Firma.query.filter_by(name=name).first():
+                        db.session.add(Firma(name=name))
+
+        db.session.commit()
+
+        # Manuelles Hinzufügen
+        new_orte = data.getlist('new_ort')
         for ort_name in new_orte:
             if ort_name.strip() and not Ort.query.filter_by(name=ort_name.strip()).first():
                 db.session.add(Ort(name=ort_name.strip()))
         db.session.commit()
 
-        # Multiple Firmen hinzufügen
-        new_firmen = data.getlist('new_firma')  # Holt alle 'new_firma'-Felder
+        new_firmen = data.getlist('new_firma')
         for firma_name in new_firmen:
             if firma_name.strip() and not Firma.query.filter_by(name=firma_name.strip()).first():
                 db.session.add(Firma(name=firma_name.strip()))
@@ -205,75 +280,104 @@ def einstellungen():
                 db.session.delete(firma)
                 db.session.commit()
 
-    max_mappen = Setting.query.filter_by(key='max_mappen').first().value
+    max_mappen = Setting.query.filter_by(key='max_mappen').first()
+    if not max_mappen:
+        max_mappen = Setting(key='max_mappen', value='300')
+        db.session.add(max_mappen)
+        db.session.commit()
+
+    max_vorgaenge_setting = Setting.query.filter_by(key='max_vorgaenge').first()
+    if not max_vorgaenge_setting:
+        max_vorgaenge_setting = Setting(key='max_vorgaenge', value='200')
+        db.session.add(max_vorgaenge_setting)
+        db.session.commit()
+
+    max_vorgaenge = int(max_vorgaenge_setting.value)
+
     orte = Ort.query.order_by(func.lower(Ort.name).asc()).all()
     firmen = Firma.query.order_by(func.lower(Firma.name).asc()).all()
-    return render_template('einstellungen.html', max_mappen=max_mappen, orte=orte, firmen=firmen)
 
-@app.route('/status/<int:id>', methods=['PUT'])
-def change_status(id):
-    schein = Arbeitsschein.query.get_or_404(id)
-    data = request.json
-    schein.status = data['status']
-    if data['status'] == 'zurueckgegeben':
-        schein.rueckgabedatum = datetime.utcnow()
-    db.session.commit()
-    return jsonify({'message': 'Status geändert'})
+    return render_template('einstellungen.html',
+                           max_mappen=max_mappen.value,
+                           max_vorgaenge=max_vorgaenge,
+                           orte=orte,
+                           firmen=firmen)
 
-@app.route('/download_pdf')
-def download_pdf():
-    pdf_files = [f for f in os.listdir(app.static_folder) if f.startswith('uebersicht_') and f.endswith('.pdf')]
-    if pdf_files:
-        latest_pdf = max(pdf_files, key=lambda x: os.path.getctime(os.path.join(app.static_folder, x)))
-        return send_from_directory(app.static_folder, latest_pdf, as_attachment=True)
-    return "Kein PDF verfügbar", 404
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        if request.form.get('password') == 'test':
+            session['logged_in'] = True
+            session['last_activity'] = datetime.now(timezone.utc).isoformat()
+            return redirect('/einstellungen')
+        return render_template('login.html', error="Falsches Passwort")
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/')
+
+@app.route('/uebersicht')
+def uebersicht():
+    return render_template('uebersicht.html', now=datetime.now())
+
+@app.route('/generate_pdf_now', methods=['POST'])
+def generate_pdf_now():
+    filename = generate_pdf()
+    return jsonify({'filename': filename})
 
 def generate_pdf():
-    with app.app_context():  # Kontext explizit erstellen
-        # Hole alle Scheine
-        scheine = Arbeitsschein.query.all()
-        # Erstelle eine Tabelle mit Daten
-        data = [['AE Nummer', 'Mappe', 'Firma', 'Ort', 'Status']]
-        for s in scheine:
-            data.append([s.ae_nummer, str(s.fach), s.firma or 'N/A', s.ort or 'N/A', s.status])
+    scheine = Arbeitsschein.query.all()
+    filename = f"uebersicht_{datetime.now().strftime('%Y-%m-%d')}.pdf"
+    filepath = os.path.join(app.static_folder, filename)
 
-        # Erstelle das PDF
-        pdf_path = os.path.join(app.static_folder, f'uebersicht_{datetime.now().strftime("%Y-%m-%d")}.pdf')
-        pdf = SimpleDocTemplate(pdf_path, pagesize=letter)
-        table = Table(data)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 14),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 12),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ]))
-        elements = [table]
-        pdf.build(elements)
-        print(f"PDF erstellt: {pdf_path}")
+    doc = SimpleDocTemplate(filepath, pagesize=A4)
+    elements = []
+    data = [["AE-Nummer", "Vorgang", "Mappe", "Firma", "Ort", "Mitarbeiter", "Telefon", "Status", "Bemerkung"]]
 
-# Scheduler initialisieren
+    for s in scheine:
+        status_de = "In Arbeit" if s.status in ['ausgegeben', 'in arbeit'] else "Zurück"
+        data.append([
+            s.ae_nummer,
+            str(s.vorgang),
+            str(s.fach),
+            s.firma or "-",
+            s.ort or "-",
+            str(s.personen),
+            s.telefonnummer or "-",
+            status_de,
+            s.bemerkung or "-"
+        ])
+
+    table = Table(data, colWidths=[2.2*cm, 1.5*cm, 1.3*cm, 3*cm, 2.5*cm, 2*cm, 2.5*cm, 2*cm, 4*cm])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0078DC')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    elements.append(table)
+    doc.build(elements)
+    return filename
+
+# ===================== SCHEDULER =====================
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=generate_pdf, trigger="cron", hour=18, minute=0)  # Täglich um 18:00 Uhr
+scheduler.add_job(generate_pdf, 'cron', hour=18, minute=0)
 scheduler.start()
 
-# Korrigierter Shutdown des Schedulers
 @app.teardown_appcontext
 def shutdown_scheduler(exception=None):
     if scheduler.running:
-        try:
-            scheduler.shutdown(wait=False)  # Wait=False vermeidet Thread-Join-Probleme
-        except RuntimeError:
-            pass  # Ignoriere Fehler beim Join des aktuellen Threads
+        scheduler.shutdown()
 
+# ===================== START =====================
 if __name__ == '__main__':
-    try:
-        app.run(debug=True)
-    except KeyboardInterrupt:
-        shutdown_scheduler()  # Manuelles Beenden mit Strg+C
+    with app.app_context():
+        os.makedirs(app.instance_path, exist_ok=True)
+        db.create_all()
+    app.run(debug=True)

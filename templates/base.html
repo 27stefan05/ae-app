@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Arbeitsschein Verwaltung{% endblock %}</title>
+    <link href="/static/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="stylesheet" href="/static/bootstrap-icons.css">
+    
+    <!-- jQuery + DataTables -->
+    <script src="/static/jquery-3.6.0.min.js"></script>
+    <script src="/static/jquery.dataTables.min.js"></script>
+    <script src="/static/dataTables.bootstrap5.min.js"></script>
+    
+    <style>
+        :root { --primary: #0078DC; }
+        body { 
+            background-color: #f8f9fa; 
+            font-family: system-ui, -apple-system, sans-serif; 
+        }
+        
+        .top-navbar {
+            background-color: rgb(0, 120, 220);
+            color: white;
+        }
+        
+        .sidebar {
+            background: white;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.08);
+            min-height: calc(100vh - 64px);
+        }
+        
+        .nav-link { 
+            color: #444; 
+            border-radius: 10px; 
+            margin: 4px 8px; 
+            padding: 12px 16px; 
+        }
+        
+        .nav-link:hover, .nav-link.active { 
+            background-color: #f0f7ff; 
+            color: var(--primary); 
+            font-weight: 500; 
+        }
+        
+        .card { 
+            border: none; 
+            box-shadow: 0 4px 25px rgba(0,0,0,0.08); 
+            border-radius: 16px; 
+        }
+        
+        .form-control, .form-select { 
+            border-radius: 10px; 
+            padding: 12px 16px; 
+        }
+        
+        .btn { 
+            border-radius: 10px; 
+            padding: 10px 20px; 
+            font-weight: 500; 
+        }
+        
+        .custom-action-btn {
+            height: 45px;
+            width: auto;
+            min-width: 85px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            margin-right: 5px;
+            padding: 6px 10px;
+        }
+        
+        .mappe-number {
+            font-size: 3em;
+            font-weight: bold;
+        }
+        
+        .bemerkung-info {
+            font-size: 1em;
+            color: rgb(230, 37, 46);
+        }
+        
+        .button-group {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            gap: 6px;
+            align-items: center;
+        }
+
+        /* === SCHÖNE BUTTON STYLES (wie früher) === */
+
+        /* Unterbrechung (Gelb) */
+        .btn-outline-warning {
+            background-color: #fffbeb;
+            border: 2px solid #facc15;
+            color: #854d0e;
+        }
+        .btn-outline-warning:hover {
+            background-color: #facc15;
+            border-color: #facc15;
+            color: black;
+        }
+
+        /* Bearbeiten (Blau) */
+        .btn-uniper-outline-secondary {
+            background-color: white;
+            border: 2px solid #0078DC;
+            color: #0078DC;
+        }
+        .btn-uniper-outline-secondary:hover {
+            background-color: #0078DC;
+            border-color: #0078DC;
+            color: white;
+        }
+
+        /* Fertig (Rot) */
+        .btn-outline-danger {
+            background-color: #fef2f2;
+            border: 2px solid #ef4444;
+            color: #b91c1c;
+        }
+        .btn-outline-danger:hover {
+            background-color: #ef4444;
+            border-color: #ef4444;
+            color: white;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+    <!-- Durchgängiger blauer Header -->
+    <nav class="navbar top-navbar px-4 py-3">
+        <div class="container-fluid">
+            <div class="d-flex align-items-center">
+                <img src="/static/logo.png" alt="Uniper Logo" height="48" class="me-3">
+                <span class="fw-bold" style="font-size: 1.65rem; color: white;">Arbeitsschein Verwaltung</span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="d-flex">
+        
+        <!-- Sidebar -->
+        <div class="sidebar p-3" style="width: 260px;">
+            <nav class="nav flex-column">
+                <a href="/" class="nav-link px-3 py-2 {% if request.path == '/' %}active{% endif %}">
+                    <img src="/static/home.png" width="20" height="20" class="me-2"> Start
+                </a>
+                <a href="/eingabe" class="nav-link px-3 py-2 {% if request.path == '/eingabe' %}active{% endif %}">
+                    <img src="/static/plus.svg" width="20" height="20" class="me-2"> Neuer Schein
+                </a>
+                <a href="/uebersicht" class="nav-link px-3 py-2 {% if request.path == '/uebersicht' %}active{% endif %}">
+                    <img src="/static/menu.png" width="20" height="20" class="me-2"> Übersicht
+                </a>
+                <a href="/einstellungen" class="nav-link px-3 py-2 {% if request.path == '/einstellungen' %}active{% endif %}">
+                    <img src="/static/setting.svg" width="20" height="20" class="me-2"> Einstellungen
+                </a>
+            </nav>
+        </div>
+
+        <!-- Content -->
+        <div class="flex-grow-1 p-4">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    <script src="/static/bootstrap.bundle.min.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

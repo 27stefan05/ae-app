@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 70vh;">
+    <div class="card shadow-sm" style="width: 100%; max-width: 400px;">
+        
+        <!-- Header -->
+        <div class="card-header text-center" style="background-color: rgb(0,120,220); color: white;">
+            <h5 class="mb-0">Anmeldung</h5>
+        </div>
+        
+        <div class="card-body">
+            <form method="POST" action="/login">
+                <div class="mb-3">
+                    <label class="form-label">Passwort</label>
+                    <input type="password" name="password" class="form-control form-control-lg" 
+                           placeholder="Passwort eingeben" required autofocus>
+                </div>
+                
+                {% if error %}
+                <div class="alert alert-danger py-2 mb-3">
+                    {{ error }}
+                </div>
+                {% endif %}
+                
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-lg" 
+                            style="background-color: rgb(0,120,220); color: white; border: none;">
+                        Anmelden
+                    </button>
+                    
+                    <!-- Abbrechen Button -->
+                    <a href="/" class="btn btn-outline-secondary btn-lg">
+                        Abbrechen
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
