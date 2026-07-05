@@ -24,11 +24,14 @@
             <!-- Vorgang -->
             <div class="col-md-3">
                 <label class="form-label">Vorgang</label>
-                <select name="vorgang" class="form-select form-select-lg" required>
-                    {% for v in range(10, max_vorgaenge + 10, 10) %}
+                <select name="vorgang" id="vorgangSelect" class="form-select form-select-lg" required>
+                    {% for v in vorgang_options %}
                     <option value="{{ v }}" {% if request.args.get('vorgang', '10')|int == v %}selected{% endif %}>{{ v }}</option>
                     {% endfor %}
+                    <option value="__custom__">Andere Zahl…</option>
                 </select>
+                <input type="number" id="vorgangCustom" class="form-control form-control-lg mt-2"
+                       placeholder="Vorgangsnummer eingeben" min="10" style="display:none">
             </div>
 
             <!-- Mappe -->
@@ -172,7 +175,7 @@ function addNewOrt() {
 // Automatische Auswahl nach Redirect
 document.addEventListener('DOMContentLoaded', function() {
     const urlParams = new URLSearchParams(window.location.search);
-    
+
     const preselectFirma = urlParams.get('preselect_firma');
     if (preselectFirma) {
         const select = document.getElementById('firmaSelect');
@@ -184,6 +187,34 @@ document.addEventListener('DOMContentLoaded', function() {
         const select = document.getElementById('ortSelect');
         if (select) select.value = preselectOrt;
     }
+});
+
+// Vorgang: Dropdown mit Ausweichfeld fuer Ausnahmen (z.B. Vorgang 11)
+const vorgangSelect = document.getElementById('vorgangSelect');
+const vorgangCustom = document.getElementById('vorgangCustom');
+
+function syncVorgangField() {
+    if (vorgangSelect.value === '__custom__') {
+        vorgangCustom.style.display = 'block';
+        vorgangCustom.required = true;
+        vorgangCustom.name = 'vorgang';
+        vorgangSelect.removeAttribute('name');
+    } else {
+        vorgangCustom.style.display = 'none';
+        vorgangCustom.required = false;
+        vorgangCustom.removeAttribute('name');
+        vorgangSelect.name = 'vorgang';
+    }
+}
+vorgangSelect.addEventListener('change', syncVorgangField);
+
+document.addEventListener('DOMContentLoaded', function() {
+    const urlVorgang = new URLSearchParams(window.location.search).get('vorgang');
+    if (urlVorgang && ![...vorgangSelect.options].some(o => o.value === urlVorgang)) {
+        vorgangSelect.value = '__custom__';
+        vorgangCustom.value = urlVorgang;
+    }
+    syncVorgangField();
 });
 </script>
 {% endblock %}

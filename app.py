@@ -90,6 +90,9 @@ def get_max_vorgaenge():
     setting = Setting.query.filter_by(key='max_vorgaenge').first()
     return int(setting.value) if setting else 200
 
+def get_vorgang_options(max_vorgaenge):
+    return list(range(10, max_vorgaenge + 10, 10))
+
 def parse_int(value, field_name, minimum=None):
     try:
         result = int(value)
@@ -147,8 +150,10 @@ def eingabe():
         bemerkung = data.get('bemerkung', '')
 
         def render_error(message):
+            max_vorgaenge = get_max_vorgaenge()
             return render_template('eingabe.html', error=message,
-                                   max_vorgaenge=get_max_vorgaenge(), next_fach=get_next_fach(),
+                                   max_vorgaenge=max_vorgaenge, vorgang_options=get_vorgang_options(max_vorgaenge),
+                                   next_fach=get_next_fach(),
                                    orte=Ort.query.order_by(func.lower(Ort.name).asc()).all(),
                                    firmen=Firma.query.order_by(func.lower(Firma.name).asc()).all())
 
@@ -196,7 +201,8 @@ def eingabe():
     next_fach = get_next_fach()
     orte = Ort.query.order_by(func.lower(Ort.name).asc()).all()
     firmen = Firma.query.order_by(func.lower(Firma.name).asc()).all()
-    return render_template('eingabe.html', next_fach=next_fach, orte=orte, firmen=firmen, max_vorgaenge=max_vorgaenge)
+    return render_template('eingabe.html', next_fach=next_fach, orte=orte, firmen=firmen,
+                           max_vorgaenge=max_vorgaenge, vorgang_options=get_vorgang_options(max_vorgaenge))
 
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 def edit(id):
@@ -221,9 +227,11 @@ def edit(id):
         def render_error(message):
             orte = Ort.query.order_by(func.lower(Ort.name).asc()).all()
             firmen = Firma.query.order_by(func.lower(Firma.name).asc()).all()
+            max_vorgaenge = get_max_vorgaenge()
             return render_template('edit.html', schein=schein, orte=orte, firmen=firmen,
-                                   max_vorgaenge=get_max_vorgaenge(),
-                                   selected_firma=schein.firma, selected_ort=schein.ort, error=message)
+                                   max_vorgaenge=max_vorgaenge, vorgang_options=get_vorgang_options(max_vorgaenge),
+                                   selected_firma=schein.firma, selected_ort=schein.ort,
+                                   selected_vorgang=schein.vorgang, error=message)
 
         try:
             personen = parse_int(data.get('personen') or 0, 'Anzahl Mitarbeiter', minimum=0)
@@ -257,7 +265,9 @@ def edit(id):
     selected_firma = preselect_firma or schein.firma
     selected_ort = preselect_ort or schein.ort
     return render_template('edit.html', schein=schein, orte=orte, firmen=firmen, max_vorgaenge=max_vorgaenge,
-                           selected_firma=selected_firma, selected_ort=selected_ort)
+                           vorgang_options=get_vorgang_options(max_vorgaenge),
+                           selected_firma=selected_firma, selected_ort=selected_ort,
+                           selected_vorgang=schein.vorgang)
 
 @app.route('/status/<int:id>', methods=['PUT'])
 def change_status(id):

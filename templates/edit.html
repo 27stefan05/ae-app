@@ -28,13 +28,18 @@
                     </div>
                     <div class="col-md-3 mb-3">
                         <label class="form-label">Vorgang</label>
-                        <select name="vorgang" class="form-select form-select-lg">
-                            {% for v in range(10, max_vorgaenge + 10, 10) %}
-                            <option value="{{ v }}" {{ 'selected' if v == schein.vorgang else '' }}>
+                        <select name="vorgang" id="vorgangSelect" class="form-select form-select-lg">
+                            {% for v in vorgang_options %}
+                            <option value="{{ v }}" {{ 'selected' if v == selected_vorgang else '' }}>
                                 {{ v }}
                             </option>
                             {% endfor %}
+                            <option value="__custom__" {{ 'selected' if selected_vorgang not in vorgang_options else '' }}>Andere Zahl…</option>
                         </select>
+                        <input type="number" id="vorgangCustom" class="form-control form-control-lg mt-2"
+                               placeholder="Vorgangsnummer eingeben" min="10"
+                               value="{{ selected_vorgang if selected_vorgang not in vorgang_options else '' }}"
+                               style="display: {{ 'block' if selected_vorgang not in vorgang_options else 'none' }};">
                     </div>
                     <div class="col-md-3 mb-3">
                         <label class="form-label">Mappe</label>
@@ -202,5 +207,25 @@ document.getElementById('newFirmaModal').addEventListener('shown.bs.modal', () =
 document.getElementById('newOrtModal').addEventListener('shown.bs.modal', () => {
     setTimeout(() => document.getElementById('newOrtName').focus(), 150);
 });
+
+// Vorgang: Dropdown mit Ausweichfeld fuer Ausnahmen (z.B. Vorgang 11)
+const vorgangSelect = document.getElementById('vorgangSelect');
+const vorgangCustom = document.getElementById('vorgangCustom');
+
+function syncVorgangField() {
+    if (vorgangSelect.value === '__custom__') {
+        vorgangCustom.style.display = 'block';
+        vorgangCustom.required = true;
+        vorgangCustom.name = 'vorgang';
+        vorgangSelect.removeAttribute('name');
+    } else {
+        vorgangCustom.style.display = 'none';
+        vorgangCustom.required = false;
+        vorgangCustom.removeAttribute('name');
+        vorgangSelect.name = 'vorgang';
+    }
+}
+vorgangSelect.addEventListener('change', syncVorgangField);
+syncVorgangField();
 </script>
 {% endblock %}
