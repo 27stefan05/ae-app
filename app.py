@@ -4,6 +4,8 @@ from sqlalchemy import func
 from flask_migrate import Migrate
 from datetime import datetime, timezone
 import os
+import atexit
+import secrets
 from apscheduler.schedulers.background import BackgroundScheduler
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -13,7 +15,20 @@ from reportlab.lib.units import cm
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'scheine.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.secret_key = 'dein-geheimes-passwort-2026'
+
+os.makedirs(app.instance_path, exist_ok=True)
+secret_key_path = os.path.join(app.instance_path, 'secret_key.txt')
+if os.environ.get('SECRET_KEY'):
+    app.secret_key = os.environ['SECRET_KEY']
+elif os.path.exists(secret_key_path):
+    with open(secret_key_path) as f:
+        app.secret_key = f.read().strip()
+else:
+    app.secret_key = secrets.token_hex(32)
+    with open(secret_key_path, 'w') as f:
+        f.write(app.secret_key)
+
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'test')
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
@@ -64,6 +79,11 @@ def get_next_fach():
         if i not in used:
             return i
     return max_mappen + 1
+
+def require_login():
+    if 'logged_in' not in session:
+        return jsonify({'error': 'Nicht angemeldet'}), 401
+    return None
 
 def get_max_vorgaenge():
     setting = Setting.query.filter_by(key='max_vorgaenge').first()
@@ -255,31 +275,6 @@ def einstellungen():
 
         db.session.commit()
 
-        # Manuelles Hinzufügen
-        new_orte = data.getlist('new_ort')
-        for ort_name in new_orte:
-            if ort_name.strip() and not Ort.query.filter_by(name=ort_name.strip()).first():
-                db.session.add(Ort(name=ort_name.strip()))
-        db.session.commit()
-
-        new_firmen = data.getlist('new_firma')
-        for firma_name in new_firmen:
-            if firma_name.strip() and not Firma.query.filter_by(name=firma_name.strip()).first():
-                db.session.add(Firma(name=firma_name.strip()))
-        db.session.commit()
-
-        if 'delete_ort' in data:
-            ort = Ort.query.get(data['delete_ort'])
-            if ort:
-                db.session.delete(ort)
-                db.session.commit()
-
-        if 'delete_firma' in data:
-            firma = Firma.query.get(data['delete_firma'])
-            if firma:
-                db.session.delete(firma)
-                db.session.commit()
-
     max_mappen = Setting.query.filter_by(key='max_mappen').first()
     if not max_mappen:
         max_mappen = Setting(key='max_mappen', value='300')
@@ -303,10 +298,92 @@ def einstellungen():
                            orte=orte,
                            firmen=firmen)
 
+@app.route('/ort', methods=['POST'])
+def add_ort():
+    guard = require_login()
+    if guard:
+        return guard
+    name = (request.json or {}).get('name', '').strip()
+    if not name:
+        return jsonify({'error': 'Name darf nicht leer sein'}), 400
+    existing = Ort.query.filter_by(name=name).first()
+    if existing:
+        return jsonify({'id': existing.id, 'name': existing.name})
+    ort = Ort(name=name)
+    db.session.add(ort)
+    db.session.commit()
+    return jsonify({'id': ort.id, 'name': ort.name})
+
+@app.route('/ort/<int:id>', methods=['PUT'])
+def update_ort(id):
+    guard = require_login()
+    if guard:
+        return guard
+    ort = Ort.query.get_or_404(id)
+    name = (request.json or {}).get('name', '').strip()
+    if not name:
+        return jsonify({'error': 'Name darf nicht leer sein'}), 400
+    if Ort.query.filter(Ort.name == name, Ort.id != id).first():
+        return jsonify({'error': 'Ort existiert bereits'}), 400
+    ort.name = name
+    db.session.commit()
+    return jsonify({'message': 'Ort aktualisiert'})
+
+@app.route('/ort/<int:id>', methods=['DELETE'])
+def delete_ort(id):
+    guard = require_login()
+    if guard:
+        return guard
+    ort = Ort.query.get_or_404(id)
+    db.session.delete(ort)
+    db.session.commit()
+    return jsonify({'message': 'Ort gelöscht'})
+
+@app.route('/firma', methods=['POST'])
+def add_firma():
+    guard = require_login()
+    if guard:
+        return guard
+    name = (request.json or {}).get('name', '').strip()
+    if not name:
+        return jsonify({'error': 'Name darf nicht leer sein'}), 400
+    existing = Firma.query.filter_by(name=name).first()
+    if existing:
+        return jsonify({'id': existing.id, 'name': existing.name})
+    firma = Firma(name=name)
+    db.session.add(firma)
+    db.session.commit()
+    return jsonify({'id': firma.id, 'name': firma.name})
+
+@app.route('/firma/<int:id>', methods=['PUT'])
+def update_firma(id):
+    guard = require_login()
+    if guard:
+        return guard
+    firma = Firma.query.get_or_404(id)
+    name = (request.json or {}).get('name', '').strip()
+    if not name:
+        return jsonify({'error': 'Name darf nicht leer sein'}), 400
+    if Firma.query.filter(Firma.name == name, Firma.id != id).first():
+        return jsonify({'error': 'Firma existiert bereits'}), 400
+    firma.name = name
+    db.session.commit()
+    return jsonify({'message': 'Firma aktualisiert'})
+
+@app.route('/firma/<int:id>', methods=['DELETE'])
+def delete_firma(id):
+    guard = require_login()
+    if guard:
+        return guard
+    firma = Firma.query.get_or_404(id)
+    db.session.delete(firma)
+    db.session.commit()
+    return jsonify({'message': 'Firma gelöscht'})
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        if request.form.get('password') == 'test':
+        if request.form.get('password') == ADMIN_PASSWORD:
             session['logged_in'] = True
             session['last_activity'] = datetime.now(timezone.utc).isoformat()
             return redirect('/einstellungen')
@@ -369,11 +446,7 @@ def generate_pdf():
 scheduler = BackgroundScheduler()
 scheduler.add_job(generate_pdf, 'cron', hour=18, minute=0)
 scheduler.start()
-
-@app.teardown_appcontext
-def shutdown_scheduler(exception=None):
-    if scheduler.running:
-        scheduler.shutdown()
+atexit.register(lambda: scheduler.shutdown() if scheduler.running else None)
 
 # ===================== START =====================
 if __name__ == '__main__':

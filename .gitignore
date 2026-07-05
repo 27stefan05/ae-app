@@ -1,5 +1,11 @@
 venv/
+Lib/
+Include/
+Scripts/
+pyvenv.cfg
+instance/
 scheine.db
+desktop.ini
 __pycache__/
 *.pyc
 *.pyo
