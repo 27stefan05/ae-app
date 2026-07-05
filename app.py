@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, render_template, redirect, url_for, send_from_directory, session, flash
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from flask_migrate import Migrate
 from datetime import datetime, timezone
 import os
@@ -44,7 +45,7 @@ class Arbeitsschein(db.Model):
     telefonnummer = db.Column(db.String(20))
     fach = db.Column(db.Integer, default=0)
     beschreibung = db.Column(db.String(200))
-    ausgabedatum = db.Column(db.DateTime, default=datetime.utcnow)
+    ausgabedatum = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     rueckgabedatum = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.String(20), default='ausgegeben')
     bemerkung = db.Column(db.String(500), nullable=True)
@@ -89,6 +90,17 @@ def get_max_vorgaenge():
     setting = Setting.query.filter_by(key='max_vorgaenge').first()
     return int(setting.value) if setting else 200
 
+def parse_int(value, field_name, minimum=None):
+    try:
+        result = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name} muss eine Zahl sein.")
+    if minimum is not None and result < minimum:
+        raise ValueError(f"{field_name} muss mindestens {minimum} sein.")
+    return result
+
+STATUS_VALUES = {'ausgegeben', 'in arbeit', 'zurueckgegeben'}
+
 # ===================== ROUTEN =====================
 
 @app.route('/')
@@ -128,14 +140,27 @@ def eingabe():
 
     if request.method == 'POST':
         data = request.form
-        ae_nummer = data.get('ae_nummer')
-        vorgang = int(data.get('vorgang', 10))
-        personen = int(data.get('personen', 0) or 0)
+        ae_nummer = (data.get('ae_nummer') or '').strip()
         firma = data.get('firma', '')
         ort = data.get('ort', '')
         telefonnummer = data.get('telefonnummer', '')
-        fach = int(data.get('fach', get_next_fach()))
         bemerkung = data.get('bemerkung', '')
+
+        def render_error(message):
+            return render_template('eingabe.html', error=message,
+                                   max_vorgaenge=get_max_vorgaenge(), next_fach=get_next_fach(),
+                                   orte=Ort.query.order_by(func.lower(Ort.name).asc()).all(),
+                                   firmen=Firma.query.order_by(func.lower(Firma.name).asc()).all())
+
+        if not ae_nummer:
+            return render_error("AE-Nummer darf nicht leer sein.")
+
+        try:
+            vorgang = parse_int(data.get('vorgang', 10), 'Vorgang', minimum=10)
+            personen = parse_int(data.get('personen') or 0, 'Anzahl Mitarbeiter', minimum=0)
+            fach = parse_int(data.get('fach') or get_next_fach(), 'Mappe', minimum=1)
+        except ValueError as e:
+            return render_error(str(e))
 
         if firma and not Firma.query.filter_by(name=firma).first():
             db.session.add(Firma(name=firma))
@@ -145,10 +170,7 @@ def eingabe():
 
         existing = Arbeitsschein.query.filter_by(ae_nummer=ae_nummer, vorgang=vorgang).first()
         if existing:
-            return render_template('eingabe.html', error="Diese AE-Nummer mit diesem Vorgang existiert bereits!",
-                                   max_vorgaenge=get_max_vorgaenge(), next_fach=get_next_fach(),
-                                   orte=Ort.query.order_by(func.lower(Ort.name).asc()).all(),
-                                   firmen=Firma.query.order_by(func.lower(Firma.name).asc()).all())
+            return render_error("Diese AE-Nummer mit diesem Vorgang existiert bereits!")
 
         schein = Arbeitsschein(
             ae_nummer=ae_nummer,
@@ -162,7 +184,11 @@ def eingabe():
             status='ausgegeben'
         )
         db.session.add(schein)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return render_error("Diese AE-Nummer mit diesem Vorgang existiert bereits!")
 
         return redirect('/')
 
@@ -176,41 +202,79 @@ def eingabe():
 def edit(id):
     schein = Arbeitsschein.query.get_or_404(id)
 
+    # Neue Firma/Ort automatisch anlegen, wenn per Redirect übergeben
+    preselect_firma = request.args.get('preselect_firma')
+    if preselect_firma:
+        if not Firma.query.filter_by(name=preselect_firma).first():
+            db.session.add(Firma(name=preselect_firma))
+            db.session.commit()
+
+    preselect_ort = request.args.get('preselect_ort')
+    if preselect_ort:
+        if not Ort.query.filter_by(name=preselect_ort).first():
+            db.session.add(Ort(name=preselect_ort))
+            db.session.commit()
+
     if request.method == 'POST':
         data = request.form
-        schein.personen = int(data.get('personen', 0) or 0)
+
+        def render_error(message):
+            orte = Ort.query.order_by(func.lower(Ort.name).asc()).all()
+            firmen = Firma.query.order_by(func.lower(Firma.name).asc()).all()
+            return render_template('edit.html', schein=schein, orte=orte, firmen=firmen,
+                                   max_vorgaenge=get_max_vorgaenge(),
+                                   selected_firma=schein.firma, selected_ort=schein.ort, error=message)
+
+        try:
+            personen = parse_int(data.get('personen') or 0, 'Anzahl Mitarbeiter', minimum=0)
+            vorgang = parse_int(data.get('vorgang', schein.vorgang), 'Vorgang', minimum=10)
+        except ValueError as e:
+            return render_error(str(e))
+
+        schein.personen = personen
+        schein.vorgang = vorgang
         schein.firma = data.get('firma', '')
         schein.ort = data.get('ort', '')
         schein.telefonnummer = data.get('telefonnummer', '')
         schein.bemerkung = data.get('bemerkung', '')
-        schein.vorgang = int(data.get('vorgang', schein.vorgang))
 
         if schein.firma and not Firma.query.filter_by(name=schein.firma).first():
             db.session.add(Firma(name=schein.firma))
         if schein.ort and not Ort.query.filter_by(name=schein.ort).first():
             db.session.add(Ort(name=schein.ort))
-        db.session.commit()
+
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return render_error("Diese AE-Nummer mit diesem Vorgang existiert bereits!")
 
         return redirect('/')
 
     orte = Ort.query.order_by(func.lower(Ort.name).asc()).all()
     firmen = Firma.query.order_by(func.lower(Firma.name).asc()).all()
     max_vorgaenge = get_max_vorgaenge()
-    return render_template('edit.html', schein=schein, orte=orte, firmen=firmen, max_vorgaenge=max_vorgaenge)
+    selected_firma = preselect_firma or schein.firma
+    selected_ort = preselect_ort or schein.ort
+    return render_template('edit.html', schein=schein, orte=orte, firmen=firmen, max_vorgaenge=max_vorgaenge,
+                           selected_firma=selected_firma, selected_ort=selected_ort)
 
 @app.route('/status/<int:id>', methods=['PUT'])
 def change_status(id):
     schein = Arbeitsschein.query.get_or_404(id)
-    data = request.json
-    schein.status = data['status']
-    if data['status'] == 'zurueckgegeben':
-        schein.rueckgabedatum = datetime.utcnow()
+    data = request.get_json(silent=True) or {}
+    status = data.get('status')
+    if status not in STATUS_VALUES:
+        return jsonify({'error': 'Ungültiger Status'}), 400
+    schein.status = status
+    if status == 'zurueckgegeben':
+        schein.rueckgabedatum = datetime.now(timezone.utc)
     db.session.commit()
     return jsonify({'message': 'Status geändert'})
 
 @app.route('/delete/<int:id>', methods=['DELETE'])
 def delete_schein(id):
-    schein = Arbeitsschein.query.get(id)
+    schein = db.session.get(Arbeitsschein, id)
     if not schein:
         return jsonify({'error': 'Arbeitsschein nicht gefunden'}), 404
     db.session.delete(schein)
@@ -238,40 +302,58 @@ def einstellungen():
 
     session['last_activity'] = datetime.now(timezone.utc).isoformat()
 
+    import_error = None
+
     if request.method == 'POST':
         data = request.form
 
         if 'max_mappen' in data:
-            setting = Setting.query.filter_by(key='max_mappen').first()
-            if setting:
-                setting.value = data['max_mappen']
-            db.session.commit()
+            try:
+                value = parse_int(data['max_mappen'], 'Maximale Anzahl Mappen', minimum=1)
+                setting = Setting.query.filter_by(key='max_mappen').first()
+                if setting:
+                    setting.value = str(value)
+                db.session.commit()
+            except ValueError as e:
+                import_error = str(e)
 
         if 'max_vorgaenge' in data:
-            setting = Setting.query.filter_by(key='max_vorgaenge').first()
-            if setting:
-                setting.value = data['max_vorgaenge']
-            db.session.commit()
+            try:
+                value = parse_int(data['max_vorgaenge'], 'Maximale Vorgänge', minimum=10)
+                setting = Setting.query.filter_by(key='max_vorgaenge').first()
+                if setting:
+                    setting.value = str(value)
+                db.session.commit()
+            except ValueError as e:
+                import_error = str(e)
 
         # Datei-Import Orte
         if 'orte_file' in request.files:
             file = request.files['orte_file']
             if file and file.filename.endswith('.txt'):
-                content = file.read().decode('utf-8')
-                for line in content.splitlines():
-                    name = line.strip()
-                    if name and not Ort.query.filter_by(name=name).first():
-                        db.session.add(Ort(name=name))
+                try:
+                    content = file.read().decode('utf-8')
+                except UnicodeDecodeError:
+                    import_error = "Die Orte-Datei konnte nicht gelesen werden (ungültige Zeichenkodierung, bitte als UTF-8 speichern)."
+                else:
+                    for line in content.splitlines():
+                        name = line.strip()
+                        if name and not Ort.query.filter_by(name=name).first():
+                            db.session.add(Ort(name=name))
 
         # Datei-Import Firmen
         if 'firmen_file' in request.files:
             file = request.files['firmen_file']
             if file and file.filename.endswith('.txt'):
-                content = file.read().decode('utf-8')
-                for line in content.splitlines():
-                    name = line.strip()
-                    if name and not Firma.query.filter_by(name=name).first():
-                        db.session.add(Firma(name=name))
+                try:
+                    content = file.read().decode('utf-8')
+                except UnicodeDecodeError:
+                    import_error = "Die Firmen-Datei konnte nicht gelesen werden (ungültige Zeichenkodierung, bitte als UTF-8 speichern)."
+                else:
+                    for line in content.splitlines():
+                        name = line.strip()
+                        if name and not Firma.query.filter_by(name=name).first():
+                            db.session.add(Firma(name=name))
 
         db.session.commit()
 
@@ -296,14 +378,15 @@ def einstellungen():
                            max_mappen=max_mappen.value,
                            max_vorgaenge=max_vorgaenge,
                            orte=orte,
-                           firmen=firmen)
+                           firmen=firmen,
+                           error=import_error)
 
 @app.route('/ort', methods=['POST'])
 def add_ort():
     guard = require_login()
     if guard:
         return guard
-    name = (request.json or {}).get('name', '').strip()
+    name = (request.get_json(silent=True) or {}).get('name', '').strip()
     if not name:
         return jsonify({'error': 'Name darf nicht leer sein'}), 400
     existing = Ort.query.filter_by(name=name).first()
@@ -320,7 +403,7 @@ def update_ort(id):
     if guard:
         return guard
     ort = Ort.query.get_or_404(id)
-    name = (request.json or {}).get('name', '').strip()
+    name = (request.get_json(silent=True) or {}).get('name', '').strip()
     if not name:
         return jsonify({'error': 'Name darf nicht leer sein'}), 400
     if Ort.query.filter(Ort.name == name, Ort.id != id).first():
@@ -344,7 +427,7 @@ def add_firma():
     guard = require_login()
     if guard:
         return guard
-    name = (request.json or {}).get('name', '').strip()
+    name = (request.get_json(silent=True) or {}).get('name', '').strip()
     if not name:
         return jsonify({'error': 'Name darf nicht leer sein'}), 400
     existing = Firma.query.filter_by(name=name).first()
@@ -361,7 +444,7 @@ def update_firma(id):
     if guard:
         return guard
     firma = Firma.query.get_or_404(id)
-    name = (request.json or {}).get('name', '').strip()
+    name = (request.get_json(silent=True) or {}).get('name', '').strip()
     if not name:
         return jsonify({'error': 'Name darf nicht leer sein'}), 400
     if Firma.query.filter(Firma.name == name, Firma.id != id).first():
