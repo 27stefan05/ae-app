@@ -30,10 +30,22 @@
 
     <div id="scheineListe" class="list-group"></div>
 
+    <div id="pagination" class="d-none justify-content-between align-items-center mt-4">
+        <button id="prevPageBtn" class="btn btn-outline-primary btn-lg">
+            <i class="bi bi-chevron-left me-1"></i> Zurück
+        </button>
+        <span id="pageIndicator" class="text-muted"></span>
+        <button id="nextPageBtn" class="btn btn-outline-primary btn-lg">
+            Weiter <i class="bi bi-chevron-right ms-1"></i>
+        </button>
+    </div>
+
 </div>
 
 <script>
 let allScheine = [];
+let currentPage = 1;
+const PAGE_SIZE = 20;
 
 function escapeHtml(value) {
     if (value === null || value === undefined) return '';
@@ -77,6 +89,7 @@ function renderListe() {
     }
 
     const container = document.getElementById('scheineListe');
+    const pagination = document.getElementById('pagination');
 
     if (filtered.length === 0) {
         container.innerHTML = `
@@ -84,10 +97,29 @@ function renderListe() {
                 <p class="text-muted fs-5 mb-0">Keine Arbeitsscheine gefunden</p>
             </div>
         `;
+        pagination.classList.add('d-none');
+        pagination.classList.remove('d-flex');
         return;
     }
 
-    container.innerHTML = filtered.map(s => `
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const pageItems = filtered.slice(start, start + PAGE_SIZE);
+
+    if (totalPages > 1) {
+        pagination.classList.remove('d-none');
+        pagination.classList.add('d-flex');
+        document.getElementById('pageIndicator').textContent =
+            `Seite ${currentPage} von ${totalPages} (${filtered.length} Einträge)`;
+        document.getElementById('prevPageBtn').disabled = currentPage <= 1;
+        document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
+    } else {
+        pagination.classList.add('d-none');
+        pagination.classList.remove('d-flex');
+    }
+
+    container.innerHTML = pageItems.map(s => `
         <div class="list-group-item p-0 mb-2 border rounded" data-id="${s.id}">
             <div class="px-3 py-2 d-flex justify-content-between align-items-center"
                  style="background-color:#0078DC; color:white; border-radius:6px 6px 0 0;">
@@ -140,7 +172,20 @@ document.getElementById('scheineListe').addEventListener('click', function(e) {
     }
 });
 
-document.getElementById('suchfeld').addEventListener('input', renderListe);
+document.getElementById('suchfeld').addEventListener('input', function() {
+    currentPage = 1;
+    renderListe();
+});
+
+document.getElementById('prevPageBtn').addEventListener('click', function() {
+    currentPage--;
+    renderListe();
+});
+
+document.getElementById('nextPageBtn').addEventListener('click', function() {
+    currentPage++;
+    renderListe();
+});
 
 document.getElementById('generatePdfBtn').addEventListener('click', function() {
     const btn = this;
