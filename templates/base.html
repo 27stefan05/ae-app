@@ -22,23 +22,30 @@
             color: white;
         }
         
-        .sidebar {
+        .top-tabs {
             background: white;
-            box-shadow: 2px 0 12px rgba(0,0,0,0.08);
-            min-height: calc(100vh - 64px);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         }
-        
-        .nav-link { 
-            color: #444; 
-            border-radius: 10px; 
-            margin: 4px 8px; 
-            padding: 12px 16px; 
+
+        .tab-link {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 14px 8px;
+            color: #444;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.95rem;
+            border-bottom: 3px solid transparent;
         }
-        
-        .nav-link:hover, .nav-link.active { 
-            background-color: #f0f7ff; 
-            color: var(--primary); 
-            font-weight: 500; 
+
+        .tab-link:hover, .tab-link.active {
+            background-color: #f0f7ff;
+            color: var(--primary);
+            border-bottom-color: var(--primary);
         }
         
         .card { 
@@ -140,30 +147,25 @@
         </div>
     </nav>
 
-    <div class="d-flex">
-        
-        <!-- Sidebar -->
-        <div class="sidebar p-3" style="width: 260px;">
-            <nav class="nav flex-column">
-                <a href="/" class="nav-link px-3 py-2 {% if request.path == '/' %}active{% endif %}">
-                    <img src="/static/home.png" width="20" height="20" class="me-2"> Start
-                </a>
-                <a href="/eingabe" class="nav-link px-3 py-2 {% if request.path == '/eingabe' %}active{% endif %}">
-                    <img src="/static/plus.svg" width="20" height="20" class="me-2"> Neuer Schein
-                </a>
-                <a href="/uebersicht" class="nav-link px-3 py-2 {% if request.path == '/uebersicht' %}active{% endif %}">
-                    <img src="/static/menu.png" width="20" height="20" class="me-2"> Übersicht
-                </a>
-                <a href="/einstellungen" class="nav-link px-3 py-2 {% if request.path == '/einstellungen' %}active{% endif %}">
-                    <img src="/static/setting.svg" width="20" height="20" class="me-2"> Einstellungen
-                </a>
-            </nav>
-        </div>
+    <!-- Navigation als Tab-Leiste (statt Sidebar, damit auf hochkant Touchdisplays kein Platz verschenkt wird) -->
+    <nav class="top-tabs d-flex">
+        <a href="/" class="tab-link {% if request.path == '/' %}active{% endif %}">
+            <img src="/static/home.png" width="24" height="24"> <span>Start</span>
+        </a>
+        <a href="/eingabe" class="tab-link {% if request.path == '/eingabe' %}active{% endif %}">
+            <img src="/static/plus.svg" width="24" height="24"> <span>Neuer Schein</span>
+        </a>
+        <a href="/uebersicht" class="tab-link {% if request.path == '/uebersicht' %}active{% endif %}">
+            <img src="/static/menu.png" width="24" height="24"> <span>Übersicht</span>
+        </a>
+        <a href="/einstellungen" class="tab-link {% if request.path == '/einstellungen' %}active{% endif %}">
+            <img src="/static/setting.svg" width="24" height="24"> <span>Einstellungen</span>
+        </a>
+    </nav>
 
-        <!-- Content -->
-        <div class="flex-grow-1 p-4">
-            {% block content %}{% endblock %}
-        </div>
+    <!-- Content -->
+    <div class="p-4">
+        {% block content %}{% endblock %}
     </div>
 
     <script src="/static/bootstrap.bundle.min.js"></script>
