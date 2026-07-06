@@ -12,3 +12,4 @@ __pycache__/
 migrations/
 .pytest_cache/
 static/uebersicht_*.pdf
+.env

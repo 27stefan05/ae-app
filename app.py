@@ -3,15 +3,19 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from flask_migrate import Migrate
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timezone
 import os
 import atexit
 import secrets
+from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 from reportlab.lib.units import cm
+
+load_dotenv()
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'scheine.db')
@@ -29,7 +33,8 @@ else:
     with open(secret_key_path, 'w') as f:
         f.write(app.secret_key)
 
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'test')
+DEFAULT_ADMIN_PASSWORD_HASH = generate_password_hash('test')
+ADMIN_PASSWORD_HASH = os.environ.get('ADMIN_PASSWORD_HASH', DEFAULT_ADMIN_PASSWORD_HASH)
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
@@ -476,7 +481,7 @@ def delete_firma(id):
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        if request.form.get('password') == ADMIN_PASSWORD:
+        if check_password_hash(ADMIN_PASSWORD_HASH, request.form.get('password', '')):
             session['logged_in'] = True
             session['last_activity'] = datetime.now(timezone.utc).isoformat()
             return redirect('/einstellungen')

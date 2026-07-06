@@ -24,7 +24,7 @@ def client():
 
 
 def login(client):
-    return client.post('/login', data={'password': app_module.ADMIN_PASSWORD}, follow_redirects=True)
+    return client.post('/login', data={'password': 'test'}, follow_redirects=True)
 
 
 def create_schein(client, ae_nummer, vorgang='10', **extra):
@@ -165,6 +165,18 @@ def test_login_logout(client):
 
 def test_login_wrong_password(client):
     resp = client.post('/login', data={'password': 'falsch'})
+    assert resp.status_code == 200
+    assert 'Falsches Passwort' in resp.get_data(as_text=True)
+
+
+def test_login_with_custom_password_hash(client, monkeypatch):
+    from werkzeug.security import generate_password_hash
+    monkeypatch.setattr(app_module, 'ADMIN_PASSWORD_HASH', generate_password_hash('geheim123'))
+
+    resp = client.post('/login', data={'password': 'geheim123'})
+    assert resp.status_code == 302
+
+    resp = client.post('/login', data={'password': 'test'})
     assert resp.status_code == 200
     assert 'Falsches Passwort' in resp.get_data(as_text=True)
 
