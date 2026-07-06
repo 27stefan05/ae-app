@@ -3,6 +3,13 @@
 # Startet die Bildschirmtastatur und haelt Chromium im Kiosk-Modus am Laufen -
 # stuerzt Chromium ab oder wird es beendet, startet die Schleife es automatisch neu.
 
+# Bildschirm ins Hochformat drehen. labwc hat dafuer keine eigene rc.xml-Option -
+# wlr-randr im Autostart-Kontext von labwc laeuft mit der richtigen Wayland-Umgebung.
+# Ausgabename herausfinden mit: ls /sys/class/drm/ && cat /sys/class/drm/*/status
+# (der Name kann trotz HDMI-Kabel "DP-..." sein, wenn der Port intern per DP++
+# umgesetzt wird - das ist normal). Bei falscher Drehrichtung 90 <-> 270 tauschen.
+wlr-randr --output DP-1 --transform 270
+
 squeekboard &
 
 while true; do
