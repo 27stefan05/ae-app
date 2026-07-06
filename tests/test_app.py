@@ -1,6 +1,5 @@
 import os
 import sys
-import tempfile
 
 import pytest
 
@@ -11,16 +10,30 @@ import app as app_module
 
 @pytest.fixture()
 def client():
-    db_fd, db_path = tempfile.mkstemp(suffix='.db')
-    app_module.app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+    # Flask-SQLAlchemy caches its engine when the app is created and ignores later
+    # changes to SQLALCHEMY_DATABASE_URI, so tests run against the real configured
+    # database (instance/scheine.db) and rely on drop_all/create_all for isolation.
     app_module.app.config['TESTING'] = True
     with app_module.app.app_context():
         app_module.db.drop_all()
         app_module.db.create_all()
     with app_module.app.test_client() as test_client:
         yield test_client
-    os.close(db_fd)
-    os.unlink(db_path)
+
+
+@pytest.fixture()
+def clean_backups():
+    db_path = app_module.get_db_path()
+    backup_dir = os.path.join(os.path.dirname(db_path), 'backups')
+
+    def _clear():
+        if os.path.isdir(backup_dir):
+            for name in os.listdir(backup_dir):
+                os.remove(os.path.join(backup_dir, name))
+
+    _clear()
+    yield backup_dir
+    _clear()
 
 
 def login(client):
@@ -208,3 +221,60 @@ def test_firma_crud(client):
 
     assert client.put(f'/firma/{firma_id}', json={'name': 'TestFirma2'}).status_code == 200
     assert client.delete(f'/firma/{firma_id}').status_code == 200
+
+
+def test_backup_now_requires_login(client):
+    assert client.post('/backup_now').status_code == 401
+
+
+def test_backup_creates_local_file(client, clean_backups):
+    login(client)
+    resp = client.post('/backup_now')
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['external'] is False
+    assert data['external_error'] is None
+
+    backups = [f for f in os.listdir(clean_backups) if f.startswith('scheine_')]
+    assert len(backups) == 1
+
+
+def test_backup_copies_to_external_dir_when_set(client, monkeypatch, tmp_path, clean_backups):
+    external_dir = tmp_path / "external_ssd"
+    external_dir.mkdir()
+    monkeypatch.setattr(app_module, 'BACKUP_DIR', str(external_dir))
+
+    login(client)
+    resp = client.post('/backup_now')
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['external'] is True
+
+    backups = [f for f in os.listdir(external_dir) if f.startswith('scheine_')]
+    assert len(backups) == 1
+
+
+def test_backup_skips_external_gracefully_when_dir_missing(client, monkeypatch, clean_backups):
+    monkeypatch.setattr(app_module, 'BACKUP_DIR', '/pfad/der/nicht/existiert')
+
+    login(client)
+    resp = client.post('/backup_now')
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['external'] is False
+    assert data['external_error'] is not None
+
+
+def test_cleanup_old_backups_removes_expired_files(tmp_path):
+    old_file = tmp_path / "scheine_2000-01-01_000000.db"
+    old_file.write_text("alt")
+    old_time = app_module.datetime.now() - app_module.timedelta(days=100)
+    os.utime(old_file, (old_time.timestamp(), old_time.timestamp()))
+
+    recent_file = tmp_path / "scheine_2099-01-01_000000.db"
+    recent_file.write_text("neu")
+
+    app_module.cleanup_old_backups(str(tmp_path))
+
+    assert not old_file.exists()
+    assert recent_file.exists()

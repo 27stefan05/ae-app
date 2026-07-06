@@ -4,10 +4,12 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import os
 import atexit
 import secrets
+import sqlite3
+import shutil
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from reportlab.lib import colors
@@ -20,6 +22,9 @@ load_dotenv()
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'scheine.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+BACKUP_DIR = os.environ.get('BACKUP_DIR')
+BACKUP_RETENTION_DAYS = 30
 
 os.makedirs(app.instance_path, exist_ok=True)
 secret_key_path = os.path.join(app.instance_path, 'secret_key.txt')
@@ -540,9 +545,74 @@ def generate_pdf():
     doc.build(elements)
     return filename
 
+# ===================== BACKUP =====================
+def get_db_path():
+    uri = app.config['SQLALCHEMY_DATABASE_URI']
+    prefix = 'sqlite:///'
+    return uri[len(prefix):] if uri.startswith(prefix) else None
+
+def cleanup_old_backups(directory):
+    cutoff = datetime.now() - timedelta(days=BACKUP_RETENTION_DAYS)
+    for name in os.listdir(directory):
+        if name.startswith('scheine_') and name.endswith('.db'):
+            path = os.path.join(directory, name)
+            try:
+                if datetime.fromtimestamp(os.path.getmtime(path)) < cutoff:
+                    os.remove(path)
+            except OSError:
+                pass
+
+def backup_database():
+    db_path = get_db_path()
+    if not db_path or not os.path.exists(db_path):
+        return {'local': None, 'external': False, 'external_error': None}
+
+    backup_dir = os.path.join(os.path.dirname(db_path), 'backups')
+    os.makedirs(backup_dir, exist_ok=True)
+    filename = f"scheine_{datetime.now().strftime('%Y-%m-%d_%H%M%S')}.db"
+    local_path = os.path.join(backup_dir, filename)
+
+    source = sqlite3.connect(db_path)
+    dest = sqlite3.connect(local_path)
+    with dest:
+        source.backup(dest)
+    source.close()
+    dest.close()
+    cleanup_old_backups(backup_dir)
+
+    external_ok = False
+    external_error = None
+    if BACKUP_DIR:
+        if os.path.isdir(BACKUP_DIR):
+            try:
+                shutil.copy2(local_path, os.path.join(BACKUP_DIR, filename))
+                cleanup_old_backups(BACKUP_DIR)
+                external_ok = True
+            except OSError as e:
+                external_error = str(e)
+        else:
+            external_error = f"Backup-Verzeichnis {BACKUP_DIR} nicht erreichbar"
+
+    return {'local': local_path, 'external': external_ok, 'external_error': external_error}
+
+@app.route('/backup_now', methods=['POST'])
+def backup_now():
+    guard = require_login()
+    if guard:
+        return guard
+    result = backup_database()
+    if not result['local']:
+        return jsonify({'error': 'Backup fehlgeschlagen: Datenbank nicht gefunden'}), 500
+    return jsonify({
+        'message': 'Backup erstellt',
+        'external': result['external'],
+        'external_error': result['external_error']
+    })
+
 # ===================== SCHEDULER =====================
 scheduler = BackgroundScheduler()
 scheduler.add_job(generate_pdf, 'cron', hour=18, minute=0)
+scheduler.add_job(backup_database, 'cron', hour=3, minute=0)
 scheduler.start()
 atexit.register(lambda: scheduler.shutdown() if scheduler.running else None)
 
