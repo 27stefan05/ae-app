@@ -9,9 +9,10 @@
     <div class="row mb-4">
         <div class="col-12">
             <div class="input-group input-group-lg">
-                <input type="text" id="ae_nummer" class="form-control" 
+                <input type="text" id="ae_nummer" class="form-control"
                        placeholder="AE-Nummer eingeben..." autofocus
-                       oninput="limitInput(this); filterListe()">
+                       oninput="limitInput(this); filterListe()"
+                       onkeydown="handleAeNummerKeydown(event)">
                 <button class="btn btn-primary" onclick="showAusgebenModal()">
                     <img src="/static/plus.svg" height="24" style="filter: brightness(0) invert(1);"> Neuer Schein
                 </button>
@@ -205,6 +206,19 @@ function filterListe() {
     renderScheineListe(filtered);
 }
 
+function handleAeNummerKeydown(event) {
+    if (event.key !== 'Enter') return;
+    const hasResults = document.querySelector('#scheineListe [data-id]') !== null;
+    if (!hasResults) {
+        showAusgebenModal();
+    }
+}
+
+function refocusAeNummerField() {
+    if (document.querySelector('.modal.show')) return;
+    document.getElementById('ae_nummer').focus();
+}
+
 function showStatusModal(id, newStatus, aeNummer, vorgang) {
     const actionText = newStatus === 'zurueckgegeben' ? 'Unterbrechung' : 'In Arbeit';
     
@@ -244,6 +258,7 @@ function showDeleteModal(id, aeNummer, vorgang) {
                 if (!res.ok) throw new Error('Löschen fehlgeschlagen');
                 modal.hide();
                 loadAllScheine();
+                document.getElementById('ae_nummer').value = '';
             })
             .catch(err => alert('Fehler beim Löschen: ' + err.message));
     };
@@ -273,5 +288,15 @@ window.onload = function() {
     loadAllScheine();
     document.getElementById('ae_nummer').focus();
 };
+
+// Suchfeld soll immer aktiv/fokussiert bleiben, damit direkt (weiter-)getippt
+// werden kann - ausser waehrend ein Modal offen ist.
+document.getElementById('ae_nummer').addEventListener('blur', function() {
+    setTimeout(refocusAeNummerField, 50);
+});
+
+['ausgebenModal', 'statusModal', 'deleteModal'].forEach(function(modalId) {
+    document.getElementById(modalId).addEventListener('hidden.bs.modal', refocusAeNummerField);
+});
 </script>
 {% endblock %}
