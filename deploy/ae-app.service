@@ -1,0 +1,16 @@
+[Unit]
+Description=Arbeitsschein Verwaltung (Gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=kiosk
+Group=kiosk
+WorkingDirectory=/opt/ae-app
+# .env wird von der App selbst geladen (python-dotenv), kein EnvironmentFile noetig.
+ExecStart=/opt/ae-app/venv/bin/gunicorn --workers 1 --threads 4 --bind 127.0.0.1:5000 app:app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
