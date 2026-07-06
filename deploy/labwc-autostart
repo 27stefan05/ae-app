@@ -1,0 +1,19 @@
+#!/bin/sh
+# Wird von labwc beim Start ausgefuehrt (~/.config/labwc/autostart).
+# Startet die Bildschirmtastatur und haelt Chromium im Kiosk-Modus am Laufen -
+# stuerzt Chromium ab oder wird es beendet, startet die Schleife es automatisch neu.
+
+squeekboard &
+
+while true; do
+    chromium-browser \
+        --kiosk \
+        --noerrdialogs \
+        --disable-infobars \
+        --incognito \
+        --disable-translate \
+        --disable-session-crashed-bubble \
+        --check-for-update-interval=31536000 \
+        http://localhost:5000
+    sleep 2
+done &
