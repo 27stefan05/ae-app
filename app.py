@@ -609,7 +609,14 @@ def backup_now():
         'external_error': result['external_error']
     })
 
+with app.app_context():
+    db.create_all()
+
 # ===================== SCHEDULER =====================
+# Startet den Scheduler-Thread beim Import dieses Moduls. Unter Gunicorn deshalb
+# nur mit einem einzigen Worker-Prozess betreiben (z.B. --workers 1 --threads 4),
+# sonst laufen taeglicher PDF-Export und Backup mehrfach und SQLite bekommt
+# gleichzeitige Schreibzugriffe aus mehreren Prozessen.
 scheduler = BackgroundScheduler()
 scheduler.add_job(generate_pdf, 'cron', hour=18, minute=0)
 scheduler.add_job(backup_database, 'cron', hour=3, minute=0)
@@ -618,7 +625,4 @@ atexit.register(lambda: scheduler.shutdown() if scheduler.running else None)
 
 # ===================== START =====================
 if __name__ == '__main__':
-    with app.app_context():
-        os.makedirs(app.instance_path, exist_ok=True)
-        db.create_all()
     app.run(debug=True)
