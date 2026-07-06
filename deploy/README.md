@@ -7,7 +7,7 @@ Autologin + labwc (minimaler Wayland-Fenstermanager) + Chromium im Kiosk-Modus
 
 ## Ablauf
 
-1. Ubuntu Server installieren, Benutzer `kiosk` anlegen.
+1. Ubuntu Server installieren, Benutzer `kwin` anlegen.
 2. Dieses Projekt nach `/opt/ae-app` kopieren (per `git clone`, solange noch
    Internet verfuegbar ist, oder per USB-Stick).
 3. `sudo ./deploy/install.sh` ausfuehren.
@@ -20,7 +20,7 @@ Autologin + labwc (minimaler Wayland-Fenstermanager) + Chromium im Kiosk-Modus
 - System-Pakete (`labwc`, `chromium-browser`, `squeekboard`, ...)
 - Python-venv + Abhaengigkeiten aus `requirements-prod.txt`
 - systemd-Service `ae-app` (Gunicorn, startet automatisch, neu startet bei Absturz)
-- Kiosk-Autostart: Autologin auf tty1 fuer den `kiosk`-Benutzer, der beim Login
+- Kiosk-Autostart: Autologin auf tty1 fuer den `kwin`-Benutzer, der beim Login
   automatisch `labwc` startet, das wiederum Squeekboard und Chromium im
   Kiosk-Modus startet (und Chromium bei einem Absturz automatisch neu startet)
 

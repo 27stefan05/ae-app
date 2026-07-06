@@ -3,7 +3,7 @@
 #
 # Voraussetzungen, bevor dieses Skript laeuft:
 #   - Ubuntu Server ist installiert
-#   - Ein Benutzer "kiosk" existiert bereits (oder KIOSK_USER unten anpassen)
+#   - Ein Benutzer "kwin" existiert bereits (oder KIOSK_USER unten anpassen)
 #   - Dieses Projekt liegt bereits unter /opt/ae-app (z.B. per USB-Stick kopiert
 #     oder "git clone", solange noch Internet verfuegbar ist)
 #
@@ -17,7 +17,7 @@
 set -euo pipefail
 
 APP_DIR="/opt/ae-app"
-KIOSK_USER="kiosk"
+KIOSK_USER="kwin"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Bitte mit sudo ausfuehren: sudo ./deploy/install.sh"
