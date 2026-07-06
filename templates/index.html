@@ -28,7 +28,7 @@
 </div>
 
 <!-- Ausgeben Modal -->
-<div class="modal fade" id="ausgebenModal" tabindex="-1">
+<div class="modal" id="ausgebenModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
@@ -48,7 +48,7 @@
 </div>
 
 <!-- Status Modal -->
-<div class="modal fade" id="statusModal" tabindex="-1">
+<div class="modal" id="statusModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
@@ -65,7 +65,7 @@
 </div>
 
 <!-- Löschen Modal -->
-<div class="modal fade" id="deleteModal" tabindex="-1">
+<div class="modal" id="deleteModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
@@ -208,8 +208,13 @@ function filterListe() {
 
 function handleAeNummerKeydown(event) {
     if (event.key !== 'Enter') return;
+    if (document.querySelector('.modal.show')) return;
     const hasResults = document.querySelector('#scheineListe [data-id]') !== null;
     if (!hasResults) {
+        // Verhindert, dass dasselbe Enter-Event sofort auch den globalen
+        // Bestaetigen-Handler in base.html ausloest und das gerade erst
+        // geoeffnete Modal ungewollt sofort wieder bestaetigt.
+        event.stopPropagation();
         showAusgebenModal();
     }
 }

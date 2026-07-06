@@ -169,6 +169,21 @@
     </div>
 
     <script src="/static/bootstrap.bundle.min.js"></script>
+    <script>
+    // Enter bestaetigt das aktuell offene Bootstrap-Modal (klickt den
+    // primaeren Button), damit Popups auch ohne Maus/Touch per Tastatur
+    // oder Scanner bedienbar sind.
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter') return;
+        const openModal = document.querySelector('.modal.show');
+        if (!openModal) return;
+        const confirmBtn = openModal.querySelector('.btn-primary, .btn-danger');
+        if (confirmBtn) {
+            e.preventDefault();
+            confirmBtn.click();
+        }
+    });
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
