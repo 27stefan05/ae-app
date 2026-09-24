@@ -2,6 +2,17 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <script>
+    (function () {
+        try {
+            var theme = localStorage.getItem('ae-theme');
+            if (theme !== 'dark' && theme !== 'light') theme = 'light';
+            document.documentElement.setAttribute('data-bs-theme', theme);
+        } catch (e) {
+            document.documentElement.setAttribute('data-bs-theme', 'light');
+        }
+    })();
+    </script>
     <title>{% block title %}Arbeitsschein Verwaltung{% endblock %}</title>
     <link href="/static/bootstrap.min.css" rel="stylesheet">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
@@ -12,9 +23,28 @@
 
     <style>
         :root { --primary: #0078DC; }
-        body { 
-            background-color: #f8f9fa; 
-            font-family: system-ui, -apple-system, sans-serif; 
+        body {
+            background-color: var(--bs-body-bg, #f8f9fa);
+            color: var(--bs-body-color, #212529);
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        [data-bs-theme="dark"] {
+            --bs-body-bg: #12181f;
+            --bs-body-color: #e8eef6;
+            --bs-emphasis-color: #ffffff;
+            --bs-secondary-color: #b7c3d4;
+            --bs-secondary-bg: #1c2633;
+            --bs-tertiary-bg: #243140;
+            --bs-border-color: #3d4f66;
+            --bs-heading-color: #f4f7fb;
+            --bs-form-control-bg: #1c2633;
+            --bs-form-control-color: #e8eef6;
+            --bs-form-control-border-color: #3d4f66;
+            --bs-card-bg: #1c2633;
+            --bs-list-group-bg: #1c2633;
+            --bs-modal-bg: #1c2633;
+            --primary: #4da3ff;
         }
         
         .top-navbar {
@@ -46,6 +76,81 @@
             background-color: #f0f7ff;
             color: var(--primary);
             border-bottom-color: var(--primary);
+        }
+
+        [data-bs-theme="dark"] .form-control,
+        [data-bs-theme="dark"] .form-select,
+        [data-bs-theme="dark"] .input-group-text,
+        [data-bs-theme="dark"] .card,
+        [data-bs-theme="dark"] .list-group-item,
+        [data-bs-theme="dark"] .modal-content {
+            background-color: #1c2633;
+            color: #e8eef6;
+            border-color: #3d4f66;
+        }
+        [data-bs-theme="dark"] .form-control:focus,
+        [data-bs-theme="dark"] .form-select:focus {
+            background-color: #1c2633;
+            color: #e8eef6;
+            border-color: #4da3ff;
+            box-shadow: 0 0 0 .2rem rgba(77, 163, 255, .25);
+        }
+        [data-bs-theme="dark"] .form-control::placeholder {
+            color: #8ea0b5;
+        }
+        [data-bs-theme="dark"] .top-tabs {
+            background: #1b2430;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+        }
+        [data-bs-theme="dark"] .tab-link {
+            color: #d5deea;
+        }
+        [data-bs-theme="dark"] .tab-link:hover,
+        [data-bs-theme="dark"] .tab-link.active {
+            background-color: #16324d;
+            color: #8ec8ff;
+            border-bottom-color: #4da3ff;
+        }
+        [data-bs-theme="dark"] .bg-light {
+            background-color: #243140 !important;
+            color: #e8eef6 !important;
+        }
+        [data-bs-theme="dark"] .btn-outline-warning {
+            background-color: #3a3208;
+            border-color: #facc15;
+            color: #fde68a;
+        }
+        [data-bs-theme="dark"] .btn-outline-warning:hover {
+            background-color: #facc15;
+            color: #1c1404;
+        }
+        [data-bs-theme="dark"] .btn-outline-danger {
+            background-color: #3f1d1d;
+            border-color: #f87171;
+            color: #fecaca;
+        }
+        [data-bs-theme="dark"] .btn-outline-danger:hover {
+            background-color: #ef4444;
+            color: white;
+        }
+
+        .theme-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 48px;
+            padding: 8px 16px;
+            border-radius: 999px;
+            border: 2px solid rgba(255,255,255,.75);
+            background: rgba(255,255,255,.12);
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+        .theme-toggle:hover,
+        .theme-toggle:focus-visible {
+            background: rgba(255,255,255,.24);
+            color: white;
         }
         
         .card { 
@@ -144,6 +249,10 @@
                 <img src="/static/logo.png" alt="Uniper Logo" height="48" class="me-3">
                 <span class="fw-bold" style="font-size: 1.65rem; color: white;">Arbeitsschein Verwaltung</span>
             </div>
+            <button type="button" id="themeToggle" class="theme-toggle" aria-pressed="false" aria-label="Dunkles Design einschalten">
+                <i class="bi bi-moon-stars" id="themeIcon" aria-hidden="true"></i>
+                <span id="themeToggleLabel">Dunkel</span>
+            </button>
         </div>
     </nav>
 
@@ -170,6 +279,32 @@
 
     <script src="/static/bootstrap.bundle.min.js"></script>
     <script>
+    (function () {
+        var btn = document.getElementById('themeToggle');
+        var label = document.getElementById('themeToggleLabel');
+        var icon = document.getElementById('themeIcon');
+
+        function apply(theme) {
+            var dark = theme === 'dark';
+            document.documentElement.setAttribute('data-bs-theme', dark ? 'dark' : 'light');
+            if (label) label.textContent = dark ? 'Hell' : 'Dunkel';
+            if (icon) icon.className = dark ? 'bi bi-sun' : 'bi bi-moon-stars';
+            if (btn) {
+                btn.setAttribute('aria-pressed', dark ? 'true' : 'false');
+                btn.setAttribute('aria-label', dark ? 'Helles Design einschalten' : 'Dunkles Design einschalten');
+            }
+        }
+
+        apply(document.documentElement.getAttribute('data-bs-theme') || 'light');
+        if (btn) {
+            btn.addEventListener('click', function () {
+                var next = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
+                try { localStorage.setItem('ae-theme', next); } catch (e) {}
+                apply(next);
+            });
+        }
+    })();
+
     // Enter bestaetigt das aktuell offene Bootstrap-Modal (klickt den
     // primaeren Button), damit Popups auch ohne Maus/Touch per Tastatur
     // oder Scanner bedienbar sind.

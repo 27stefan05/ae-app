@@ -19,6 +19,12 @@
                            placeholder="Passwort eingeben" required autofocus>
                 </div>
                 
+                {% if request.args.get('timeout') %}
+                <div class="alert alert-warning py-2 mb-3">
+                    Sitzung abgelaufen. Bitte erneut anmelden.
+                </div>
+                {% endif %}
+
                 {% if error %}
                 <div class="alert alert-danger py-2 mb-3">
                     {{ error }}

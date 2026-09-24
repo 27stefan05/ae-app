@@ -9,16 +9,28 @@ import app as app_module
 
 
 @pytest.fixture()
-def client():
-    # Flask-SQLAlchemy caches its engine when the app is created and ignores later
-    # changes to SQLALCHEMY_DATABASE_URI, so tests run against the real configured
-    # database (instance/scheine.db) and rely on drop_all/create_all for isolation.
-    app_module.app.config['TESTING'] = True
+def client(tmp_path):
+    # Nicht die Kiosk-Datenbank anfassen. Flask-SQLAlchemy merkt sich die Engine
+    # beim ersten Zugriff, deshalb wird sie hier auf eine temporäre Datei umgebogen.
+    db_file = tmp_path / "test.db"
+    uri = "sqlite:///" + str(db_file)
+    app_module.app.config["TESTING"] = True
+    app_module.app.config["SQLALCHEMY_DATABASE_URI"] = uri
     with app_module.app.app_context():
-        app_module.db.drop_all()
+        app_module.db.session.remove()
+        engines = app_module.db._app_engines[app_module.app]
+        old = engines.get(None)
+        options = {"url": uri, "echo": False}
+        app_module.db._apply_driver_defaults(options, app_module.app)
+        engines[None] = app_module.db._make_engine(None, options, app_module.app)
+        if old is not None:
+            old.dispose()
         app_module.db.create_all()
     with app_module.app.test_client() as test_client:
         yield test_client
+    with app_module.app.app_context():
+        app_module.db.session.remove()
+        app_module.db.drop_all()
 
 
 @pytest.fixture()
@@ -278,3 +290,91 @@ def test_cleanup_old_backups_removes_expired_files(tmp_path):
 
     assert not old_file.exists()
     assert recent_file.exists()
+
+
+def test_database_under_test_is_temporary(client):
+    assert os.path.basename(app_module.get_db_path()) == "test.db"
+
+
+def test_eingabe_keeps_values_when_duplicate(client):
+    create_schein(client, "11112222", firma="BestehendeFirma")
+    resp = client.post("/eingabe", data={
+        "ae_nummer": "11112222",
+        "vorgang": "10",
+        "personen": "4",
+        "telefonnummer": "0999",
+        "bemerkung": "bitte halten",
+        "firma": "BestehendeFirma",
+        "ort": "Werk",
+    })
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "existiert bereits" in body
+    assert "11112222" in body
+    assert 'value="0999"' in body
+    assert "bitte halten" in body
+
+
+def test_edit_invalid_vorgang_keeps_typed_values(client):
+    create_schein(client, "40404040", telefonnummer="111")
+    schein_id = client.get("/scheine").get_json()[0]["id"]
+    resp = client.post(f"/edit/{schein_id}", data={
+        "personen": "2",
+        "vorgang": "abc",
+        "telefonnummer": "555",
+        "bemerkung": "halt",
+    })
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "Zahl" in body
+    assert 'value="555"' in body
+    assert "halt" in body
+
+
+def test_edit_preselect_keeps_draft_fields(client):
+    create_schein(client, "80808080")
+    schein_id = client.get("/scheine").get_json()[0]["id"]
+    resp = client.get(
+        f"/edit/{schein_id}?preselect_firma=NeueFirma&personen=6&telefonnummer=444&bemerkung=notiz&vorgang=11"
+    )
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "NeueFirma" in body
+    assert 'value="6"' in body
+    assert 'value="444"' in body
+    assert "notiz" in body
+    assert 'value="11"' in body
+
+
+def test_generate_pdf_without_request_and_with_umlauts(client):
+    create_schein(client, "12121212", firma="Müller GmbH", bemerkung="Größe ok")
+    filename = app_module.generate_pdf()
+    path = os.path.join(app_module.app.static_folder, filename)
+    try:
+        assert filename.startswith("uebersicht_")
+        with open(path, "rb") as handle:
+            assert handle.read(5) == b"%PDF-"
+    finally:
+        if os.path.exists(path):
+            os.remove(path)
+
+
+def test_settings_session_times_out(client, monkeypatch):
+    login(client)
+    monkeypatch.setattr(app_module, "SESSION_TIMEOUT_SECONDS", -1)
+    resp = client.get("/einstellungen", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "timeout=1" in resp.headers["Location"]
+    assert client.post("/ort", json={"name": "Spaeter"}).status_code == 401
+
+
+def test_login_page_explains_timeout(client):
+    body = client.get("/login?timeout=1").get_data(as_text=True)
+    assert "Sitzung abgelaufen" in body
+
+
+def test_dark_mode_toggle_is_on_every_page(client):
+    body = client.get("/").get_data(as_text=True)
+    assert 'id="themeToggle"' in body
+    assert "ae-theme" in body
+    assert 'data-bs-theme' in body

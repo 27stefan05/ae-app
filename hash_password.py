@@ -8,9 +8,17 @@ from werkzeug.security import generate_password_hash
 DEFAULT_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 
 
+def format_env_value(value):
+    """Quotet Werte mit $, sonst zerlegt python-dotenv den Passwort-Hash."""
+    if value and all(c.isalnum() or c in '._-/:@' for c in value):
+        return value
+    escaped = value.replace("'", "'\"'\"'")
+    return f"'{escaped}'"
+
+
 def upsert_env_value(env_path, key, value):
     """Setzt key=value in der .env-Datei - ersetzt eine vorhandene Zeile oder haengt sie an."""
-    line = f'{key}={value}'
+    line = f'{key}={format_env_value(value)}'
     lines = []
     if os.path.exists(env_path):
         with open(env_path) as f:

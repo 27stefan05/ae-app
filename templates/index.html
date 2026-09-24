@@ -271,7 +271,10 @@ function showDeleteModal(id, aeNummer, vorgang) {
 
 function showAusgebenModal() {
     const ae = document.getElementById('ae_nummer').value.trim();
-    if (!ae) return;
+    if (!ae) {
+        window.location.href = '/eingabe';
+        return;
+    }
 
     document.getElementById('modalAeNummer').textContent = ae;
     const modal = new bootstrap.Modal(document.getElementById('ausgebenModal'));

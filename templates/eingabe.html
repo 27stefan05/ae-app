@@ -18,7 +18,7 @@
             <div class="col-md-6">
                 <label class="form-label">AE-Nummer</label>
                 <input type="text" name="ae_nummer" class="form-control form-control-lg" 
-                       value="{{ request.args.get('ae_nummer', '') }}" maxlength="8" required>
+                       value="{{ values.ae_nummer }}" maxlength="8" required>
             </div>
 
             <!-- Vorgang -->
@@ -26,7 +26,7 @@
                 <label class="form-label">Vorgang</label>
                 <select name="vorgang" id="vorgangSelect" class="form-select form-select-lg" required>
                     {% for v in vorgang_options %}
-                    <option value="{{ v }}" {% if request.args.get('vorgang', '10')|int == v %}selected{% endif %}>{{ v }}</option>
+                    <option value="{{ v }}" {% if values.vorgang|string == v|string %}selected{% endif %}>{{ v }}</option>
                     {% endfor %}
                     <option value="__custom__">Andere Zahl…</option>
                 </select>
@@ -49,7 +49,7 @@
                         <option value="">-- Firma auswählen --</option>
                         {% for firma in firmen %}
                         <option value="{{ firma.name }}" 
-                            {% if request.args.get('preselect_firma') == firma.name %}selected{% endif %}>
+                            {% if values.firma == firma.name %}selected{% endif %}>
                             {{ firma.name }}
                         </option>
                         {% endfor %}
@@ -66,7 +66,7 @@
                         <option value="">-- Ort auswählen --</option>
                         {% for ort in orte %}
                         <option value="{{ ort.name }}" 
-                            {% if request.args.get('preselect_ort') == ort.name %}selected{% endif %}>
+                            {% if values.ort == ort.name %}selected{% endif %}>
                             {{ ort.name }}
                         </option>
                         {% endfor %}
@@ -79,20 +79,20 @@
             <div class="col-md-6">
                 <label class="form-label">Anzahl Mitarbeiter</label>
                 <input type="number" name="personen" class="form-control" min="1" 
-                       value="{{ request.args.get('personen', '1') }}">
+                       value="{{ values.personen }}">
             </div>
 
             <!-- Telefonnummer -->
             <div class="col-md-6">
                 <label class="form-label">Telefonnummer</label>
                 <input type="text" name="telefonnummer" class="form-control" 
-                       value="{{ request.args.get('telefonnummer', '') }}">
+                       value="{{ values.telefonnummer }}">
             </div>
 
             <!-- Bemerkung -->
             <div class="col-12">
                 <label class="form-label">Bemerkung</label>
-                <textarea name="bemerkung" class="form-control" rows="3">{{ request.args.get('bemerkung', '') }}</textarea>
+                <textarea name="bemerkung" class="form-control" rows="3">{{ values.bemerkung }}</textarea>
             </div>
         </div>
 
@@ -152,13 +152,21 @@ function showNewOrtModal() {
     new bootstrap.Modal(document.getElementById('newOrtModal')).show();
 }
 
+function currentFormParams() {
+    const params = new URLSearchParams();
+    document.querySelectorAll('form[action="/eingabe"] [name]').forEach(function(el) {
+        if (el.name) params.set(el.name, el.value);
+    });
+    return params;
+}
+
 function addNewFirma() {
     const name = document.getElementById('newFirmaName').value.trim();
     if (!name) return alert('Bitte Firmennamen eingeben');
 
-    const params = new URLSearchParams(window.location.search);
+    const params = currentFormParams();
+    params.delete('firma');
     params.set('preselect_firma', name);
-
     window.location.href = '/eingabe?' + params.toString();
 }
 
@@ -166,9 +174,9 @@ function addNewOrt() {
     const name = document.getElementById('newOrtName').value.trim();
     if (!name) return alert('Bitte Ortsnamen eingeben');
 
-    const params = new URLSearchParams(window.location.search);
+    const params = currentFormParams();
+    params.delete('ort');
     params.set('preselect_ort', name);
-
     window.location.href = '/eingabe?' + params.toString();
 }
 
@@ -209,10 +217,10 @@ function syncVorgangField() {
 vorgangSelect.addEventListener('change', syncVorgangField);
 
 document.addEventListener('DOMContentLoaded', function() {
-    const urlVorgang = new URLSearchParams(window.location.search).get('vorgang');
-    if (urlVorgang && ![...vorgangSelect.options].some(o => o.value === urlVorgang)) {
+    const preset = {{ values.vorgang|tojson }};
+    if (preset && ![...vorgangSelect.options].some(o => o.value === String(preset))) {
         vorgangSelect.value = '__custom__';
-        vorgangCustom.value = urlVorgang;
+        vorgangCustom.value = preset;
     }
     syncVorgangField();
 });

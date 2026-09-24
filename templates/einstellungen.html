@@ -280,12 +280,21 @@ function deleteFirma(id) {
 }
 
 document.getElementById('generatePdfBtn').addEventListener('click', function() {
+    const btn = this;
+    btn.disabled = true;
     fetch('/generate_pdf_now', { method: 'POST' })
-        .then(res => res.json())
-        .then(data => {
+        .then(res => res.json().then(data => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || !data.filename) {
+                throw new Error(data.error || 'PDF fehlgeschlagen');
+            }
             const link = document.getElementById('pdfDownloadLink');
             link.href = `/static/${data.filename}`;
             document.getElementById('pdfLink').style.display = 'block';
+        })
+        .catch(() => alert('Fehler beim Erzeugen der PDF!'))
+        .finally(() => {
+            btn.disabled = false;
         });
 });
 

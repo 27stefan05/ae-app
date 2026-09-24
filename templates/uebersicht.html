@@ -42,6 +42,23 @@
 
 </div>
 
+<!-- Löschen Modal -->
+<div class="modal" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Schein löschen?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center" id="deleteModalBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" id="confirmDelete" class="btn btn-danger">Löschen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 let allScheine = [];
 let currentPage = 1;
@@ -160,15 +177,21 @@ document.getElementById('scheineListe').addEventListener('click', function(e) {
         location.href = `/edit/${id}`;
     } else if (btn.dataset.action === 'delete') {
         const schein = allScheine.find(s => String(s.id) === String(id));
-        if (!confirm(`Möchtest du AE ${schein.ae_nummer} (Vorgang ${schein.vorgang}) wirklich löschen?`)) return;
-        fetch(`/delete/${id}`, { method: 'DELETE' })
-            .then(res => {
-                if (res.ok) {
+        if (!schein) return;
+        document.getElementById('deleteModalBody').innerHTML =
+            `<p>Möchtest du <strong>AE ${escapeHtml(schein.ae_nummer)} (Vorgang ${schein.vorgang})</strong> wirklich löschen?</p>` +
+            `<p class="text-danger">Diese Aktion kann nicht rückgängig gemacht werden.</p>`;
+        const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+        modal.show();
+        document.getElementById('confirmDelete').onclick = function() {
+            fetch(`/delete/${id}`, { method: 'DELETE' })
+                .then(res => {
+                    if (!res.ok) throw new Error('Löschen fehlgeschlagen');
+                    modal.hide();
                     loadAllScheine();
-                } else {
-                    alert('Fehler beim Löschen!');
-                }
-            });
+                })
+                .catch(() => alert('Fehler beim Löschen!'));
+        };
     }
 });
 
@@ -195,8 +218,11 @@ document.getElementById('generatePdfBtn').addEventListener('click', function() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Wird erzeugt...';
 
     fetch('/generate_pdf_now', { method: 'POST' })
-        .then(res => res.json())
-        .then(data => {
+        .then(res => res.json().then(data => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || !data.filename) {
+                throw new Error(data.error || 'PDF fehlgeschlagen');
+            }
             const downloadBtn = document.getElementById('downloadPdfBtn');
             downloadBtn.href = `/static/${data.filename}`;
             downloadBtn.style.display = 'inline-block';

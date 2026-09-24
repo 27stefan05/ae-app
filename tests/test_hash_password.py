@@ -31,3 +31,21 @@ def test_upsert_handles_missing_trailing_newline(tmp_path):
     env_path.write_text('SECRET_KEY=xyz')
     hash_password.upsert_env_value(str(env_path), 'ADMIN_PASSWORD_HASH', 'abc123')
     assert env_path.read_text() == 'SECRET_KEY=xyz\nADMIN_PASSWORD_HASH=abc123\n'
+
+
+def test_upsert_quotes_values_that_contain_dollar(tmp_path):
+    env_path = tmp_path / ".env"
+    raw = "scrypt:32768:8:1$SALT$abcdef"
+    hash_password.upsert_env_value(str(env_path), "ADMIN_PASSWORD_HASH", raw)
+    assert env_path.read_text() == f"ADMIN_PASSWORD_HASH='{raw}'\n"
+
+
+def test_unquoted_hash_is_not_interpolated(tmp_path, monkeypatch):
+    monkeypatch.delenv("ADMIN_PASSWORD_HASH", raising=False)
+    monkeypatch.setenv("SALT", "SHOULD_NOT_REPLACE")
+    raw = "scrypt:32768:8:1$SALT$abcdef"
+    env_path = tmp_path / ".env"
+    env_path.write_text(f"ADMIN_PASSWORD_HASH={raw}\n")
+    from dotenv import load_dotenv
+    assert load_dotenv(env_path, override=True, interpolate=False)
+    assert os.environ["ADMIN_PASSWORD_HASH"] == raw

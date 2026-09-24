@@ -104,17 +104,17 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Anzahl Mitarbeiter</label>
-                        <input type="number" class="form-control" name="personen" value="{{ schein.personen }}" min="1">
+                        <input type="number" class="form-control" name="personen" value="{{ draft_personen }}" min="1">
                     </div>
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Telefonnummer</label>
-                        <input type="text" class="form-control" name="telefonnummer" value="{{ schein.telefonnummer }}">
+                        <input type="text" class="form-control" name="telefonnummer" value="{{ draft_telefon }}">
                     </div>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label">Bemerkung</label>
-                    <textarea name="bemerkung" class="form-control" rows="4">{{ schein.bemerkung or '' }}</textarea>
+                    <textarea name="bemerkung" class="form-control" rows="4">{{ draft_bemerkung }}</textarea>
                 </div>
             </div>
         </div>
@@ -177,13 +177,27 @@ function showNewFirmaModal() {
     new bootstrap.Modal(document.getElementById('newFirmaModal')).show();
 }
 
+function editDraftParams() {
+    const params = new URLSearchParams();
+    const vorgang = vorgangSelect.value === '__custom__' ? vorgangCustom.value : vorgangSelect.value;
+    if (vorgang) params.set('vorgang', vorgang);
+    const personen = document.querySelector('[name="personen"]');
+    const telefon = document.querySelector('[name="telefonnummer"]');
+    const bemerkung = document.querySelector('[name="bemerkung"]');
+    if (personen) params.set('personen', personen.value);
+    if (telefon) params.set('telefonnummer', telefon.value);
+    if (bemerkung) params.set('bemerkung', bemerkung.value);
+    return params;
+}
+
 function addNewFirma() {
     const name = document.getElementById('newFirmaName').value.trim();
     if (!name) return;
+    const params = editDraftParams();
     const currentOrt = document.getElementById('ortSelect').value || '';
-    let url = `/edit/{{ schein.id }}?preselect_firma=${encodeURIComponent(name)}`;
-    if (currentOrt) url += `&preselect_ort=${encodeURIComponent(currentOrt)}`;
-    window.location.href = url;
+    params.set('preselect_firma', name);
+    if (currentOrt) params.set('preselect_ort', currentOrt);
+    window.location.href = `/edit/{{ schein.id }}?` + params.toString();
 }
 
 function showNewOrtModal() {
@@ -194,10 +208,11 @@ function showNewOrtModal() {
 function addNewOrt() {
     const name = document.getElementById('newOrtName').value.trim();
     if (!name) return;
+    const params = editDraftParams();
     const currentFirma = document.getElementById('firmaSelect').value || '';
-    let url = `/edit/{{ schein.id }}?preselect_ort=${encodeURIComponent(name)}`;
-    if (currentFirma) url += `&preselect_firma=${encodeURIComponent(currentFirma)}`;
-    window.location.href = url;
+    params.set('preselect_ort', name);
+    if (currentFirma) params.set('preselect_firma', currentFirma);
+    window.location.href = `/edit/{{ schein.id }}?` + params.toString();
 }
 
 // Autofokus

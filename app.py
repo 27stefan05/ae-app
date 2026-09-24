@@ -13,11 +13,13 @@ import shutil
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
 from reportlab.lib.units import cm
 
-load_dotenv()
+load_dotenv(interpolate=False)
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'scheine.db')
@@ -91,11 +93,6 @@ def get_next_fach():
             return i
     return max_mappen + 1
 
-def require_login():
-    if 'logged_in' not in session:
-        return jsonify({'error': 'Nicht angemeldet'}), 401
-    return None
-
 def get_max_vorgaenge():
     setting = Setting.query.filter_by(key='max_vorgaenge').first()
     return int(setting.value) if setting else 200
@@ -113,6 +110,68 @@ def parse_int(value, field_name, minimum=None):
     return result
 
 STATUS_VALUES = {'ausgegeben', 'in arbeit', 'zurueckgegeben'}
+SESSION_TIMEOUT_SECONDS = 900
+
+
+def session_state():
+    """'ok', 'anon' oder 'timeout'. Bei gültiger Sitzung wird die Aktivität erneuert."""
+    if not session.get('logged_in'):
+        return 'anon'
+    last_raw = session.get('last_activity')
+    if last_raw:
+        try:
+            last = datetime.fromisoformat(last_raw)
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            if (datetime.now(timezone.utc) - last).total_seconds() > SESSION_TIMEOUT_SECONDS:
+                session.clear()
+                return 'timeout'
+        except ValueError:
+            session.clear()
+            return 'timeout'
+    session['last_activity'] = datetime.now(timezone.utc).isoformat()
+    return 'ok'
+
+
+def require_login():
+    if session_state() != 'ok':
+        return jsonify({'error': 'Nicht angemeldet'}), 401
+    return None
+
+
+def eingabe_form_values():
+    src = request.form if request.method == 'POST' and request.form else request.args
+    return {
+        'ae_nummer': (src.get('ae_nummer') or '').strip(),
+        'vorgang': src.get('vorgang') or '10',
+        'personen': src.get('personen') or '1',
+        'telefonnummer': src.get('telefonnummer') or '',
+        'bemerkung': src.get('bemerkung') or '',
+        'firma': src.get('preselect_firma') or src.get('firma') or '',
+        'ort': src.get('preselect_ort') or src.get('ort') or '',
+    }
+
+
+def edit_draft(schein, source, preselect_firma=None, preselect_ort=None):
+    def picked(key, fallback):
+        if source is not None and key in source:
+            return source.get(key)
+        return fallback
+
+    raw_vorgang = picked('vorgang', schein.vorgang)
+    try:
+        selected_vorgang = int(raw_vorgang)
+    except (TypeError, ValueError):
+        selected_vorgang = schein.vorgang
+
+    return {
+        'selected_firma': preselect_firma or picked('firma', schein.firma) or '',
+        'selected_ort': preselect_ort or picked('ort', schein.ort) or '',
+        'selected_vorgang': selected_vorgang,
+        'draft_personen': picked('personen', schein.personen),
+        'draft_telefon': picked('telefonnummer', schein.telefonnummer or ''),
+        'draft_bemerkung': picked('bemerkung', schein.bemerkung or ''),
+    }
 
 # ===================== ROUTEN =====================
 
@@ -162,6 +221,7 @@ def eingabe():
         def render_error(message):
             max_vorgaenge = get_max_vorgaenge()
             return render_template('eingabe.html', error=message,
+                                   values=eingabe_form_values(),
                                    max_vorgaenge=max_vorgaenge, vorgang_options=get_vorgang_options(max_vorgaenge),
                                    next_fach=get_next_fach(),
                                    orte=Ort.query.order_by(func.lower(Ort.name).asc()).all(),
@@ -212,6 +272,7 @@ def eingabe():
     orte = Ort.query.order_by(func.lower(Ort.name).asc()).all()
     firmen = Firma.query.order_by(func.lower(Firma.name).asc()).all()
     return render_template('eingabe.html', next_fach=next_fach, orte=orte, firmen=firmen,
+                           values=eingabe_form_values(),
                            max_vorgaenge=max_vorgaenge, vorgang_options=get_vorgang_options(max_vorgaenge))
 
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
@@ -240,8 +301,7 @@ def edit(id):
             max_vorgaenge = get_max_vorgaenge()
             return render_template('edit.html', schein=schein, orte=orte, firmen=firmen,
                                    max_vorgaenge=max_vorgaenge, vorgang_options=get_vorgang_options(max_vorgaenge),
-                                   selected_firma=schein.firma, selected_ort=schein.ort,
-                                   selected_vorgang=schein.vorgang, error=message)
+                                   error=message, **edit_draft(schein, data))
 
         try:
             personen = parse_int(data.get('personen') or 0, 'Anzahl Mitarbeiter', minimum=0)
@@ -272,12 +332,9 @@ def edit(id):
     orte = Ort.query.order_by(func.lower(Ort.name).asc()).all()
     firmen = Firma.query.order_by(func.lower(Firma.name).asc()).all()
     max_vorgaenge = get_max_vorgaenge()
-    selected_firma = preselect_firma or schein.firma
-    selected_ort = preselect_ort or schein.ort
     return render_template('edit.html', schein=schein, orte=orte, firmen=firmen, max_vorgaenge=max_vorgaenge,
                            vorgang_options=get_vorgang_options(max_vorgaenge),
-                           selected_firma=selected_firma, selected_ort=selected_ort,
-                           selected_vorgang=schein.vorgang)
+                           **edit_draft(schein, request.args, preselect_firma, preselect_ort))
 
 @app.route('/status/<int:id>', methods=['PUT'])
 def change_status(id):
@@ -303,24 +360,9 @@ def delete_schein(id):
 
 @app.route('/einstellungen', methods=['GET', 'POST'])
 def einstellungen():
-    if 'logged_in' not in session:
-        return redirect('/login')
-
-    # === Auto-Logout nach 15 Minuten ===
-    if 'last_activity' in session:
-        try:
-            last = datetime.fromisoformat(session['last_activity'])
-            if last.tzinfo is None:
-                last = last.replace(tzinfo=timezone.utc)
-            now = datetime.now(timezone.utc)
-            if (now - last).total_seconds() > 900:
-                session.clear()
-                return redirect('/login?timeout=1')
-        except:
-            session.clear()
-            return redirect('/login')
-
-    session['last_activity'] = datetime.now(timezone.utc).isoformat()
+    state = session_state()
+    if state != 'ok':
+        return redirect('/login?timeout=1' if state == 'timeout' else '/login')
 
     import_error = None
 
@@ -504,46 +546,131 @@ def uebersicht():
 
 @app.route('/generate_pdf_now', methods=['POST'])
 def generate_pdf_now():
-    filename = generate_pdf()
+    try:
+        filename = generate_pdf()
+    except Exception:
+        app.logger.exception('PDF-Erzeugung fehlgeschlagen')
+        return jsonify({'error': 'PDF konnte nicht erzeugt werden'}), 500
     return jsonify({'filename': filename})
 
+
+def pdf_safe(value):
+    text = '-' if value is None or value == '' else str(value)
+    return (
+        text.encode('latin-1', 'replace').decode('latin-1')
+        .replace('&', '&amp;')
+        .replace('<', '&lt;')
+        .replace('>', '&gt;')
+    )
+
+
+def cleanup_old_pdfs():
+    folder = app.static_folder
+    if not folder or not os.path.isdir(folder):
+        return
+    cutoff = datetime.now() - timedelta(days=BACKUP_RETENTION_DAYS)
+    for name in os.listdir(folder):
+        if name.startswith('uebersicht_') and name.endswith('.pdf'):
+            path = os.path.join(folder, name)
+            try:
+                if datetime.fromtimestamp(os.path.getmtime(path)) < cutoff:
+                    os.remove(path)
+            except OSError:
+                pass
+
+
 def generate_pdf():
-    scheine = Arbeitsschein.query.all()
-    filename = f"uebersicht_{datetime.now().strftime('%Y-%m-%d')}.pdf"
-    filepath = os.path.join(app.static_folder, filename)
+    # Der Cron-Job läuft in einem eigenen Thread ohne Request-Kontext.
+    with app.app_context():
+        scheine = (
+            Arbeitsschein.query
+            .order_by(Arbeitsschein.ae_nummer, Arbeitsschein.vorgang)
+            .all()
+        )
+        filename = f"uebersicht_{datetime.now().strftime('%Y-%m-%d')}.pdf"
+        filepath = os.path.join(app.static_folder, filename)
 
-    doc = SimpleDocTemplate(filepath, pagesize=A4)
-    elements = []
-    data = [["AE-Nummer", "Vorgang", "Mappe", "Firma", "Ort", "Mitarbeiter", "Telefon", "Status", "Bemerkung"]]
+        # Querformat, damit neun Spalten auf A4 passen. Hochformat mit den
+        # alten Spaltenbreiten war breiter als die Seite und die Erzeugung
+        # ist mit LayoutError abgebrochen.
+        doc = SimpleDocTemplate(
+            filepath,
+            pagesize=landscape(A4),
+            leftMargin=0.8 * cm,
+            rightMargin=0.8 * cm,
+            topMargin=1.0 * cm,
+            bottomMargin=1.0 * cm,
+            title='Arbeitsschein-Übersicht',
+        )
+        header_style = ParagraphStyle(
+            'pdf-header',
+            fontName='Helvetica-Bold',
+            fontSize=8,
+            leading=10,
+            textColor=colors.white,
+            alignment=TA_CENTER,
+        )
+        cell_style = ParagraphStyle(
+            'pdf-cell',
+            fontName='Helvetica',
+            fontSize=8,
+            leading=10,
+            alignment=TA_LEFT,
+        )
+        title_style = ParagraphStyle(
+            'pdf-title',
+            fontName='Helvetica-Bold',
+            fontSize=12,
+            leading=14,
+            textColor=colors.HexColor('#002d5a'),
+            alignment=TA_LEFT,
+        )
 
-    for s in scheine:
-        status_de = "In Arbeit" if s.status in ['ausgegeben', 'in arbeit'] else "Zurück"
-        data.append([
-            s.ae_nummer,
-            str(s.vorgang),
-            str(s.fach),
-            s.firma or "-",
-            s.ort or "-",
-            str(s.personen),
-            s.telefonnummer or "-",
-            status_de,
-            s.bemerkung or "-"
-        ])
+        headers = ["AE-Nummer", "Vorgang", "Mappe", "Firma", "Ort", "Mitarbeiter", "Telefon", "Status", "Bemerkung"]
+        data = [[Paragraph(pdf_safe(h), header_style) for h in headers]]
+        for s in scheine:
+            status_de = "In Arbeit" if s.status in ['ausgegeben', 'in arbeit'] else "Zurück"
+            row = [
+                s.ae_nummer,
+                str(s.vorgang),
+                str(s.fach),
+                s.firma or "-",
+                s.ort or "-",
+                str(s.personen),
+                s.telefonnummer or "-",
+                status_de,
+                s.bemerkung or "-",
+            ]
+            data.append([Paragraph(pdf_safe(value), cell_style) for value in row])
 
-    table = Table(data, colWidths=[2.2*cm, 1.5*cm, 1.3*cm, 3*cm, 2.5*cm, 2*cm, 2.5*cm, 2*cm, 4*cm])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0078DC')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    ]))
-    elements.append(table)
-    doc.build(elements)
-    return filename
+        col_widths = [2.6*cm, 1.8*cm, 1.6*cm, 4.4*cm, 3.4*cm, 2.4*cm, 3.2*cm, 2.6*cm, 5.7*cm]
+        table = Table(data, colWidths=col_widths, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0078DC')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.4, colors.grey),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f3f8fd')]),
+        ]))
+        title = Paragraph(
+            pdf_safe(f"Arbeitsscheine {datetime.now().strftime('%d.%m.%Y %H:%M')} - {len(scheine)} Einträge"),
+            title_style,
+        )
+        doc.build([title, Spacer(1, 0.4 * cm), table])
+        cleanup_old_pdfs()
+        return filename
+
+
+def run_scheduled(job):
+    try:
+        job()
+    except Exception:
+        app.logger.exception('Geplanter Job %s ist fehlgeschlagen', getattr(job, '__name__', job))
 
 # ===================== BACKUP =====================
 def get_db_path():
@@ -618,8 +745,8 @@ with app.app_context():
 # sonst laufen taeglicher PDF-Export und Backup mehrfach und SQLite bekommt
 # gleichzeitige Schreibzugriffe aus mehreren Prozessen.
 scheduler = BackgroundScheduler()
-scheduler.add_job(generate_pdf, 'cron', hour=18, minute=0)
-scheduler.add_job(backup_database, 'cron', hour=3, minute=0)
+scheduler.add_job(lambda: run_scheduled(generate_pdf), 'cron', hour=18, minute=0, id='daily_pdf')
+scheduler.add_job(lambda: run_scheduled(backup_database), 'cron', hour=3, minute=0, id='daily_backup')
 scheduler.start()
 atexit.register(lambda: scheduler.shutdown() if scheduler.running else None)
 
