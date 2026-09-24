@@ -64,6 +64,22 @@
     </div>
 </div>
 
+<!-- Mappe nach der Statusänderung -->
+<div class="modal" id="mappeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Mappe</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center" id="mappeModalBody"></div>
+            <div class="modal-footer">
+                <button type="button" id="mappeOk" class="btn btn-primary btn-lg w-100" data-bs-dismiss="modal">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Löschen Modal -->
 <div class="modal" id="deleteModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
@@ -178,7 +194,7 @@ document.getElementById('scheineListe').addEventListener('click', function(e) {
     if (!schein) return;
 
     if (btn.dataset.action === 'status') {
-        showStatusModal(id, btn.dataset.newstatus, schein.ae_nummer, schein.vorgang);
+        showStatusModal(id, btn.dataset.newstatus, schein.ae_nummer, schein.vorgang, schein.fach);
     } else if (btn.dataset.action === 'edit') {
         location.href = `/edit/${id}`;
     } else if (btn.dataset.action === 'delete') {
@@ -224,7 +240,7 @@ function refocusAeNummerField() {
     document.getElementById('ae_nummer').focus();
 }
 
-function showStatusModal(id, newStatus, aeNummer, vorgang) {
+function showStatusModal(id, newStatus, aeNummer, vorgang, fach) {
     const actionText = newStatus === 'zurueckgegeben' ? 'Unterbrechung' : 'In Arbeit';
     
     document.getElementById('statusModalBody').innerHTML = `
@@ -236,17 +252,38 @@ function showStatusModal(id, newStatus, aeNummer, vorgang) {
     modal.show();
 
     document.getElementById('confirmStatus').onclick = function() {
-        modal.hide();
+        const btn = this;
+        btn.disabled = true;
         fetch(`/status/${id}`, {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({status: newStatus})
-        }).then(() => {
+        }).then(res => {
+            if (!res.ok) throw new Error('Status konnte nicht geändert werden');
+            window.aeShowMappeAfterClose = {
+                aeNummer: aeNummer,
+                vorgang: vorgang,
+                fach: fach
+            };
+            modal.hide();
             loadAllScheine();
             document.getElementById('ae_nummer').value = '';
-            document.getElementById('ae_nummer').focus();
+        }).catch(err => {
+            alert(err.message);
+        }).finally(() => {
+            btn.disabled = false;
         });
     };
+}
+
+function showMappeModal(info) {
+    document.getElementById('mappeModalBody').innerHTML = `
+        <p>AE <strong>${escapeHtml(info.aeNummer)}</strong>, Vorgang ${escapeHtml(info.vorgang)}</p>
+        <p class="text-muted mb-1">Der Schein gehört in</p>
+        <div class="mappe-number">${escapeHtml(info.fach)}</div>
+        <div class="fs-4">Mappe</div>
+    `;
+    new bootstrap.Modal(document.getElementById('mappeModal')).show();
 }
 
 function showDeleteModal(id, aeNummer, vorgang) {
@@ -303,8 +340,17 @@ document.getElementById('ae_nummer').addEventListener('blur', function() {
     setTimeout(refocusAeNummerField, 50);
 });
 
-['ausgebenModal', 'statusModal', 'deleteModal'].forEach(function(modalId) {
+['ausgebenModal', 'deleteModal', 'mappeModal'].forEach(function(modalId) {
     document.getElementById(modalId).addEventListener('hidden.bs.modal', refocusAeNummerField);
+});
+document.getElementById('statusModal').addEventListener('hidden.bs.modal', function() {
+    if (window.aeShowMappeAfterClose) {
+        const info = window.aeShowMappeAfterClose;
+        window.aeShowMappeAfterClose = null;
+        showMappeModal(info);
+        return;
+    }
+    refocusAeNummerField();
 });
 </script>
 {% endblock %}

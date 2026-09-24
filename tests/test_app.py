@@ -59,7 +59,10 @@ def create_schein(client, ae_nummer, vorgang='10', **extra):
 
 
 def test_index_loads(client):
-    assert client.get('/').status_code == 200
+    body = client.get('/').get_data(as_text=True)
+    assert 'id="mappeModal"' in body
+    assert 'id="mappeOk"' in body
+    assert 'aeShowMappeAfterClose' in body
 
 
 def test_create_and_list_schein(client):
