@@ -17,7 +17,8 @@ Autologin + labwc (minimaler Wayland-Fenstermanager) + Chromium im Kiosk-Modus
 
 ## Was das Skript automatisiert
 
-- System-Pakete (`labwc`, `chromium-browser`, `squeekboard`, ...)
+- System-Pakete (`labwc`, `seatd`, `wlr-randr`, `chromium-browser`, `squeekboard`)
+- Benutzer `kwin` in den Gruppen `video`, `render` und `input` (plus `seat`, falls vorhanden), `seatd` wird gestartet
 - Python-venv + Abhaengigkeiten aus `requirements-prod.txt`
 - systemd-Service `ae-app` (Gunicorn, startet automatisch, neu startet bei Absturz)
 - Kiosk-Autostart: Autologin auf tty1 fuer den `kwin`-Benutzer, der beim Login

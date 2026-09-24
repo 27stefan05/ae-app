@@ -38,7 +38,17 @@ fi
 echo "==> Installiere System-Pakete..."
 apt update
 apt install -y python3 python3-venv python3-pip \
-    labwc seatd chromium-browser squeekboard
+    labwc seatd wlr-randr chromium-browser squeekboard
+
+echo "==> Gruppen und seatd fuer den Kiosk-Benutzer..."
+# video/render: Bildschirm und GPU, input: Touch und Tastatur.
+# seat nur, wenn das Paket die Gruppe anlegt. Wirkt erst nach dem naechsten Login.
+KIOSK_GROUPS="video,render,input"
+if getent group seat >/dev/null; then
+    KIOSK_GROUPS="$KIOSK_GROUPS,seat"
+fi
+usermod -aG "$KIOSK_GROUPS" "$KIOSK_USER"
+systemctl enable --now seatd
 
 echo "==> Python-Umgebung einrichten..."
 sudo -u "$KIOSK_USER" python3 -m venv "$APP_DIR/venv"
