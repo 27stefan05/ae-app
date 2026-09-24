@@ -10,8 +10,9 @@
         <div class="col-12">
             <div class="input-group input-group-lg">
                 <input type="text" id="ae_nummer" class="form-control"
-                       placeholder="AE-Nummer eingeben..." autofocus
-                       oninput="limitInput(this); filterListe()"
+                       placeholder="Suchen: AE-Nummer, Firma, Ort, Telefon…"
+                       autofocus
+                       oninput="filterListe()"
                        onkeydown="handleAeNummerKeydown(event)">
                 <button class="btn btn-primary" onclick="showAusgebenModal()">
                     <img src="/static/plus.svg" height="24" style="filter: brightness(0) invert(1);"> Neuer Schein
@@ -208,10 +209,12 @@ function filterListe() {
     let filtered = allScheine;
 
     if (searchValue) {
-        filtered = allScheine.filter(s => 
-            s.ae_nummer.toLowerCase().includes(searchValue)
+        filtered = allScheine.filter(s =>
+            [s.ae_nummer, s.vorgang, s.fach, s.firma, s.ort, s.telefonnummer, s.bemerkung].some(
+                field => String(field == null ? '' : field).toLowerCase().includes(searchValue)
+            )
         );
-        document.getElementById('listeHeader').textContent = `Suchergebnisse für "${searchValue}"`;
+        document.getElementById('listeHeader').textContent = `Suchergebnisse für "${searchValue}" (${filtered.length})`;
     } else {
         filtered = allScheine.filter(s => 
             s.status === 'ausgegeben' || s.status === 'in arbeit'
@@ -225,8 +228,10 @@ function filterListe() {
 function handleAeNummerKeydown(event) {
     if (event.key !== 'Enter') return;
     if (document.querySelector('.modal.show')) return;
+    const value = document.getElementById('ae_nummer').value.trim();
     const hasResults = document.querySelector('#scheineListe [data-id]') !== null;
-    if (!hasResults) {
+    // Nur eine AE-Nummer legt einen neuen Schein an. Eine Textsuche ohne Treffer nicht.
+    if (!hasResults && /^\d{1,8}$/.test(value)) {
         // Verhindert, dass dasselbe Enter-Event sofort auch den globalen
         // Bestaetigen-Handler in base.html ausloest und das gerade erst
         // geoeffnete Modal ungewollt sofort wieder bestaetigt.
@@ -308,7 +313,7 @@ function showDeleteModal(id, aeNummer, vorgang) {
 
 function showAusgebenModal() {
     const ae = document.getElementById('ae_nummer').value.trim();
-    if (!ae) {
+    if (!/^\d{1,8}$/.test(ae)) {
         window.location.href = '/eingabe';
         return;
     }
@@ -321,12 +326,6 @@ function showAusgebenModal() {
         modal.hide();
         window.location.href = `/eingabe?ae_nummer=${encodeURIComponent(ae)}`;
     };
-}
-
-function limitInput(input) {
-    let value = input.value.replace(/[^0-9]/g, '');
-    if (value.length > 8) value = value.slice(0, 8);
-    input.value = value;
 }
 
 window.onload = function() {
