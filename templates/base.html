@@ -483,6 +483,47 @@
             confirmBtn.click();
         }
     });
+
+    // Nach 3 Minuten ohne Tippen oder Antippen zurueck auf die Startseite.
+    // Offene Fenster zu, Suchfeld leer. Einstellungen werden dabei abgemeldet.
+    window.aeIdleMs = 3 * 60 * 1000;
+    (function () {
+        var timer = null;
+
+        function arm() {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(window.aeReturnToStart, window.aeIdleMs);
+        }
+
+        window.aeReturnToStart = function () {
+            var path = location.pathname;
+            if (path === '/einstellungen') {
+                location.replace('/logout');
+                return;
+            }
+            if (path !== '/') {
+                location.replace('/');
+                return;
+            }
+            window.aeShowMappeAfterClose = null;
+            document.querySelectorAll('.modal.show').forEach(function (el) {
+                var inst = bootstrap.Modal.getInstance(el);
+                if (inst) inst.hide();
+            });
+            var field = document.getElementById('ae_nummer');
+            if (field) {
+                field.value = '';
+                if (typeof filterListe === 'function') filterListe();
+                field.focus();
+            }
+            arm();
+        };
+
+        ['pointerdown', 'keydown', 'input', 'touchstart', 'scroll'].forEach(function (name) {
+            document.addEventListener(name, arm, true);
+        });
+        arm();
+    })();
     </script>
     {% block scripts %}{% endblock %}
 </body>

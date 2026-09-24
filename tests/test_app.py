@@ -63,6 +63,8 @@ def test_index_loads(client):
     assert 'id="mappeModal"' in body
     assert 'id="mappeOk"' in body
     assert 'aeShowMappeAfterClose' in body
+    assert 'aeReturnToStart' in body
+    assert 'aeIdleMs = 3 * 60 * 1000' in body
 
 
 def test_create_and_list_schein(client):
