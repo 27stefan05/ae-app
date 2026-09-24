@@ -51,6 +51,42 @@
     </div>
 
     <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">Darstellung</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-4">
+                                <label class="form-label" for="theme_lat">Breitengrad</label>
+                                <input id="theme_lat" name="theme_lat" class="form-control" inputmode="decimal"
+                                       placeholder="z. B. 48.87"
+                                       value="{{ theme_lat if theme_lat is not none else '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="theme_lon">Längengrad</label>
+                                <input id="theme_lon" name="theme_lon" class="form-control" inputmode="decimal"
+                                       placeholder="z. B. 10.59"
+                                       value="{{ theme_lon if theme_lon is not none else '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <button type="submit" class="btn btn-primary">Speichern</button>
+                            </div>
+                        </div>
+                        <small class="text-muted d-block mt-2">
+                            Leer lassen: dunkel von 18:00 bis 6:00 Uhr.
+                            Mit beiden Werten: nach Sonnenaufgang und Sonnenuntergang am Kiosk.
+                            Ein Tipp auf Hell oder Dunkel gilt nur bis zum nächsten Wechsel.
+                        </small>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
 
         <!-- Orte + Firmen nebeneinander -->
         <div class="col-lg-6 mb-4">

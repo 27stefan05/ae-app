@@ -93,6 +93,53 @@ def get_next_fach():
             return i
     return max_mappen + 1
 
+def get_theme_coords():
+    def read(key):
+        row = Setting.query.filter_by(key=key).first()
+        if not row or not (row.value or '').strip():
+            return None
+        try:
+            return float(row.value)
+        except ValueError:
+            return None
+
+    lat = read('theme_lat')
+    lon = read('theme_lon')
+    if lat is None or lon is None:
+        return None, None
+    return lat, lon
+
+
+def upsert_setting(key, value):
+    setting = Setting.query.filter_by(key=key).first()
+    if setting:
+        setting.value = value
+    else:
+        db.session.add(Setting(key=key, value=value))
+
+
+def parse_coord(value, low, high, label):
+    text = (value or '').strip().replace(',', '.')
+    if text == '':
+        return ''
+    try:
+        number = float(text)
+    except ValueError:
+        raise ValueError(f"{label} muss eine Zahl sein.")
+    if number < low or number > high:
+        raise ValueError(f"{label} muss zwischen {low} und {high} liegen.")
+    return str(number)
+
+
+@app.context_processor
+def inject_theme_coords():
+    try:
+        lat, lon = get_theme_coords()
+    except Exception:
+        lat, lon = None, None
+    return {'theme_lat': lat, 'theme_lon': lon}
+
+
 def get_max_vorgaenge():
     setting = Setting.query.filter_by(key='max_vorgaenge').first()
     return int(setting.value) if setting else 200
@@ -385,6 +432,18 @@ def einstellungen():
                 setting = Setting.query.filter_by(key='max_vorgaenge').first()
                 if setting:
                     setting.value = str(value)
+                db.session.commit()
+            except ValueError as e:
+                import_error = str(e)
+
+        if 'theme_lat' in data or 'theme_lon' in data:
+            try:
+                lat = parse_coord(data.get('theme_lat'), -90, 90, 'Breitengrad')
+                lon = parse_coord(data.get('theme_lon'), -180, 180, 'Längengrad')
+                if (lat == '') != (lon == ''):
+                    raise ValueError('Breitengrad und Längengrad bitte beide eintragen oder beide leer lassen.')
+                upsert_setting('theme_lat', lat)
+                upsert_setting('theme_lon', lon)
                 db.session.commit()
             except ValueError as e:
                 import_error = str(e)

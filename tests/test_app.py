@@ -376,5 +376,26 @@ def test_login_page_explains_timeout(client):
 def test_dark_mode_toggle_is_on_every_page(client):
     body = client.get("/").get_data(as_text=True)
     assert 'id="themeToggle"' in body
-    assert "ae-theme" in body
-    assert 'data-bs-theme' in body
+    assert "ae-theme-override" in body
+    assert "automatisch" in body
+
+
+def test_theme_coords_roundtrip(client):
+    login(client)
+    resp = client.post("/einstellungen", data={"theme_lat": "48,87", "theme_lon": "10.59"})
+    assert resp.status_code == 200
+    body = client.get("/").get_data(as_text=True)
+    assert "48.87" in body
+    assert "10.59" in body
+
+
+def test_theme_coords_need_both(client):
+    login(client)
+    resp = client.post("/einstellungen", data={"theme_lat": "48.87", "theme_lon": ""})
+    assert "beide" in resp.get_data(as_text=True)
+
+
+def test_theme_coords_reject_out_of_range(client):
+    login(client)
+    resp = client.post("/einstellungen", data={"theme_lat": "120", "theme_lon": "10"})
+    assert "zwischen" in resp.get_data(as_text=True)

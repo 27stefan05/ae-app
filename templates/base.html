@@ -3,15 +3,151 @@
 <head>
     <meta charset="UTF-8">
     <script>
-    (function () {
-        try {
-            var theme = localStorage.getItem('ae-theme');
-            if (theme !== 'dark' && theme !== 'light') theme = 'light';
-            document.documentElement.setAttribute('data-bs-theme', theme);
-        } catch (e) {
-            document.documentElement.setAttribute('data-bs-theme', 'light');
+    window.aeTheme = (function () {
+        var LAT = {{ theme_lat|tojson }};
+        var LON = {{ theme_lon|tojson }};
+        var OVERRIDE = 'ae-theme-override';
+        var UNTIL = 'ae-theme-override-until';
+
+        function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+        function atHour(day, hour) {
+            return new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, 0, 0, 0);
         }
+
+        function addDays(day, days) {
+            return new Date(day.getFullYear(), day.getMonth(), day.getDate() + days, day.getHours(), day.getMinutes(), day.getSeconds(), 0);
+        }
+
+        function fromLocalHours(day, hours) {
+            var midnight = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0, 0);
+            return new Date(midnight.getTime() + hours * 3600000);
+        }
+
+        function sunTimes(day) {
+            if (LAT === null || LON === null) return null;
+            var zenith = 90.833;
+            var toRad = function (d) { return d * Math.PI / 180; };
+            var toDeg = function (r) { return r * 180 / Math.PI; };
+            var start = new Date(day.getFullYear(), 0, 0);
+            var N = Math.floor((day - start) / 86400000);
+            var tz = -day.getTimezoneOffset() / 60;
+            var lngHour = LON / 15;
+
+            function one(rising) {
+                var t = N + ((rising ? 6 : 18) - lngHour) / 24;
+                var M = (0.9856 * t) - 3.289;
+                var L = M + (1.916 * Math.sin(toRad(M))) + (0.020 * Math.sin(toRad(2 * M))) + 282.634;
+                L = (L % 360 + 360) % 360;
+                var RA = toDeg(Math.atan(0.91764 * Math.tan(toRad(L))));
+                RA = (RA % 360 + 360) % 360;
+                var Lq = Math.floor(L / 90) * 90;
+                var RAq = Math.floor(RA / 90) * 90;
+                RA = (RA + (Lq - RAq)) / 15;
+                var sinDec = 0.39782 * Math.sin(toRad(L));
+                var cosDec = Math.cos(Math.asin(sinDec));
+                var cosH = (Math.cos(toRad(zenith)) - (sinDec * Math.sin(toRad(LAT)))) / (cosDec * Math.cos(toRad(LAT)));
+                if (cosH > 1 || cosH < -1) return null;
+                var H = rising ? (360 - toDeg(Math.acos(cosH))) : toDeg(Math.acos(cosH));
+                H = H / 15;
+                var T = H + RA - (0.06571 * t) - 6.622;
+                var UT = ((T - lngHour) % 24 + 24) % 24;
+                return fromLocalHours(day, UT + tz);
+            }
+
+            var sunrise = one(true);
+            var sunset = one(false);
+            if (!sunrise || !sunset) return null;
+            return { sunrise: sunrise, sunset: sunset };
+        }
+
+        function bounds(now) {
+            var sun = sunTimes(now);
+            if (sun && sun.sunrise < sun.sunset) {
+                return { kind: 'sun', sunrise: sun.sunrise, sunset: sun.sunset };
+            }
+            return { kind: 'clock' };
+        }
+
+        function autoTheme(now) {
+            var b = bounds(now);
+            if (b.kind === 'clock') {
+                var h = now.getHours();
+                return (h >= 18 || h < 6) ? 'dark' : 'light';
+            }
+            return (now < b.sunrise || now >= b.sunset) ? 'dark' : 'light';
+        }
+
+        function nextSwitch(now) {
+            var b = bounds(now);
+            if (b.kind === 'clock') {
+                var six = atHour(now, 6);
+                var eighteen = atHour(now, 18);
+                if (now < six) return six;
+                if (now < eighteen) return eighteen;
+                return addDays(six, 1);
+            }
+            if (now < b.sunrise) return b.sunrise;
+            if (now < b.sunset) return b.sunset;
+            var tomorrow = addDays(now, 1);
+            var next = sunTimes(tomorrow);
+            return next ? next.sunrise : addDays(atHour(now, 6), 1);
+        }
+
+        function clearOverride() {
+            try {
+                localStorage.removeItem(OVERRIDE);
+                localStorage.removeItem(UNTIL);
+            } catch (e) {}
+        }
+
+        function readOverride(now) {
+            try {
+                var theme = localStorage.getItem(OVERRIDE);
+                var until = Date.parse(localStorage.getItem(UNTIL) || '');
+                if ((theme === 'dark' || theme === 'light') && until && now.getTime() < until) {
+                    return { theme: theme, until: new Date(until) };
+                }
+            } catch (e) {}
+            clearOverride();
+            return null;
+        }
+
+        function resolve(now) {
+            var over = readOverride(now);
+            if (over) return { theme: over.theme, manual: true, until: over.until };
+            return { theme: autoTheme(now), manual: false, until: nextSwitch(now) };
+        }
+
+        function setManual(theme, now) {
+            var until = nextSwitch(now);
+            try {
+                localStorage.setItem(OVERRIDE, theme);
+                localStorage.setItem(UNTIL, until.toISOString());
+            } catch (e) {}
+            return until;
+        }
+
+        function hint(state) {
+            if (!state.manual) return 'automatisch';
+            var when = state.until;
+            return 'manuell bis ' + pad(when.getHours()) + ':' + pad(when.getMinutes());
+        }
+
+        return {
+            resolve: resolve,
+            setManual: setManual,
+            hint: hint,
+            nextSwitch: nextSwitch,
+            autoTheme: autoTheme,
+            sunTimes: sunTimes
+        };
     })();
+    try {
+        document.documentElement.setAttribute('data-bs-theme', window.aeTheme.resolve(new Date()).theme);
+    } catch (e) {
+        document.documentElement.setAttribute('data-bs-theme', 'light');
+    }
     </script>
     <title>{% block title %}Arbeitsschein Verwaltung{% endblock %}</title>
     <link href="/static/bootstrap.min.css" rel="stylesheet">
@@ -136,16 +272,28 @@
 
         .theme-toggle {
             display: inline-flex;
-            align-items: center;
-            gap: 8px;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0;
             min-height: 48px;
-            padding: 8px 16px;
+            padding: 6px 16px;
             border-radius: 999px;
             border: 2px solid rgba(255,255,255,.75);
             background: rgba(255,255,255,.12);
             color: white;
             font-weight: 600;
             font-size: 1rem;
+            line-height: 1.15;
+        }
+        .theme-toggle .theme-main {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .theme-toggle #themeHint {
+            font-size: 0.72rem;
+            font-weight: 500;
+            opacity: 0.85;
         }
         .theme-toggle:hover,
         .theme-toggle:focus-visible {
@@ -250,8 +398,11 @@
                 <span class="fw-bold" style="font-size: 1.65rem; color: white;">Arbeitsschein Verwaltung</span>
             </div>
             <button type="button" id="themeToggle" class="theme-toggle" aria-pressed="false" aria-label="Dunkles Design einschalten">
-                <i class="bi bi-moon-stars" id="themeIcon" aria-hidden="true"></i>
-                <span id="themeToggleLabel">Dunkel</span>
+                <span class="theme-main">
+                    <i class="bi bi-moon-stars" id="themeIcon" aria-hidden="true"></i>
+                    <span id="themeToggleLabel">Dunkel</span>
+                </span>
+                <span id="themeHint">automatisch</span>
             </button>
         </div>
     </nav>
@@ -283,24 +434,38 @@
         var btn = document.getElementById('themeToggle');
         var label = document.getElementById('themeToggleLabel');
         var icon = document.getElementById('themeIcon');
+        var hint = document.getElementById('themeHint');
+        var timer = null;
 
-        function apply(theme) {
-            var dark = theme === 'dark';
+        function paint(state) {
+            var dark = state.theme === 'dark';
             document.documentElement.setAttribute('data-bs-theme', dark ? 'dark' : 'light');
             if (label) label.textContent = dark ? 'Hell' : 'Dunkel';
             if (icon) icon.className = dark ? 'bi bi-sun' : 'bi bi-moon-stars';
+            if (hint) hint.textContent = window.aeTheme.hint(state);
             if (btn) {
                 btn.setAttribute('aria-pressed', dark ? 'true' : 'false');
                 btn.setAttribute('aria-label', dark ? 'Helles Design einschalten' : 'Dunkles Design einschalten');
             }
         }
 
-        apply(document.documentElement.getAttribute('data-bs-theme') || 'light');
+        function tick() {
+            var now = new Date();
+            var state = window.aeTheme.resolve(now);
+            paint(state);
+            if (timer) clearTimeout(timer);
+            var wait = Math.max(1000, state.until.getTime() - now.getTime() + 500);
+            timer = setTimeout(tick, Math.min(wait, 60000));
+        }
+
+        tick();
         if (btn) {
             btn.addEventListener('click', function () {
-                var next = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
-                try { localStorage.setItem('ae-theme', next); } catch (e) {}
-                apply(next);
+                var now = new Date();
+                var current = window.aeTheme.resolve(now).theme;
+                var next = current === 'dark' ? 'light' : 'dark';
+                window.aeTheme.setManual(next, now);
+                tick();
             });
         }
     })();
