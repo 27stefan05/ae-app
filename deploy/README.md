@@ -17,7 +17,8 @@ Autologin + labwc (minimaler Wayland-Fenstermanager) + Chromium im Kiosk-Modus
 
 ## Was das Skript automatisiert
 
-- System-Pakete (`labwc`, `seatd`, `wlr-randr`, `chromium-browser`, `squeekboard`)
+- System-Pakete (`labwc`, `seatd`, `wlr-randr`, `swaybg`, `curl`, `plymouth`, `chromium-browser`, `squeekboard`)
+- Boot-Logo: Plymouth bis labwc steht, danach dasselbe Logo, bis die App auf Port 5000 antwortet
 - Benutzer `kwin` in den Gruppen `video`, `render` und `input` (plus `seat`, falls vorhanden), `seatd` wird gestartet
 - Python-venv + Abhaengigkeiten aus `requirements-prod.txt`
 - systemd-Service `ae-app` (Gunicorn, startet automatisch, neu startet bei Absturz)
@@ -43,6 +44,28 @@ Der Name kann trotz HDMI-Kabel z.B. `DP-1` lauten, wenn der physische Port
 intern per DP++ (Dual-Mode DisplayPort) umgesetzt wird - das ist normal.
 Bei falscher Drehrichtung `--transform 90` statt `270` (oder umgekehrt)
 probieren, dann `deploy/labwc-autostart` entsprechend anpassen.
+
+## Startbildschirm
+
+Beim Einschalten kommt kein Boot-Text und kein Terminal. Zuerst das Plymouth-Logo,
+danach dasselbe Logo im Kiosk, bis `http://127.0.0.1:5000/` antwortet. Erst dann
+oeffnet Chromium die App. Die Farbe ist das Blau der Kopfzeile (`#0078DC`).
+
+Das GRUB-Menue ist versteckt. Es erscheint, wenn man beim Einschalten **Esc**
+(UEFI) oder die **linke Shift-Taste** (BIOS) haelt.
+
+## Wartungsterminal
+
+Autologin gilt nur fuer tty1. Eine Tastatur anschliessen:
+
+| Taste | Wirkung |
+|---|---|
+| Strg+Alt+F2 | Login-Prompt. Benutzer `kwin` und das Ubuntu-Passwort, nicht das App-Passwort |
+| Strg+Alt+F1 | zurueck zum Kiosk |
+
+Das geht auch schon, waehrend das Logo laeuft. Ohne Tastatur kommt man vom
+Touchscreen aus nicht auf die Konsole. Wenn labwc nicht startet, verschwindet
+das Logo nach zwei Minuten von selbst.
 
 ## Was bewusst nicht automatisiert ist (hardware-/ortsabhaengig)
 

@@ -1,18 +1,26 @@
 #!/bin/sh
 # Wird von labwc beim Start ausgefuehrt (~/.config/labwc/autostart).
-# Startet die Bildschirmtastatur und haelt Chromium im Kiosk-Modus am Laufen -
-# stuerzt Chromium ab oder wird es beendet, startet die Schleife es automatisch neu.
+# Zeigt das Logo, bis die App antwortet, und startet Chromium dann im Kiosk.
+# Stuerzt Chromium ab, startet die Schleife es neu.
 
-# Bildschirm ins Hochformat drehen. labwc hat dafuer keine eigene rc.xml-Option -
-# wlr-randr im Autostart-Kontext von labwc laeuft mit der richtigen Wayland-Umgebung.
-# Ausgabename herausfinden mit: ls /sys/class/drm/ && cat /sys/class/drm/*/status
-# (der Name kann trotz HDMI-Kabel "DP-..." sein, wenn der Port intern per DP++
-# umgesetzt wird - das ist normal). Bei falscher Drehrichtung 90 <-> 270 tauschen.
+# Bildschirm ins Hochformat drehen. labwc hat dafuer keine eigene rc.xml-Option.
+# Ausgabename: ls /sys/class/drm/ && cat /sys/class/drm/*/status
+# Bei falscher Drehrichtung 90 <-> 270 tauschen.
 wlr-randr --output DP-1 --transform 270
+
+# Dieselbe Farbe und dasselbe Logo wie der Boot-Splash, damit dazwischen
+# kein Terminal aufblitzt. swaybg laeuft schon in der gedrehten Aufloesung.
+swaybg -c '#0078DC' -i /opt/ae-app/deploy/plymouth/logo.png -m center >/dev/null 2>&1 &
+sleep 0.4
+plymouth quit >/dev/null 2>&1 || true
 
 squeekboard &
 
 while true; do
+    # Fehlerseite vermeiden, solange Gunicorn noch nicht antwortet.
+    while ! curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:5000/; do
+        sleep 0.4
+    done
     chromium-browser \
         --kiosk \
         --noerrdialogs \
@@ -20,7 +28,9 @@ while true; do
         --incognito \
         --disable-translate \
         --disable-session-crashed-bubble \
+        --no-first-run \
         --check-for-update-interval=31536000 \
-        http://localhost:5000
+        --disable-features=TranslateUI \
+        http://127.0.0.1:5000/
     sleep 2
 done &

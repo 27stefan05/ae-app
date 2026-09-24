@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=AE Splash
+Description=Arbeitsschein-Kiosk, nur das Logo
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/ae-splash
+ScriptFile=/usr/share/plymouth/themes/ae-splash/ae-splash.script

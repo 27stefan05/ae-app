@@ -1,0 +1,15 @@
+# Hintergrund wie die Kopfzeile der App (#0078DC), Logo in der Mitte.
+# Texte und Fortschrittsmeldungen werden absichtlich nicht angezeigt.
+
+logo_image = Image("logo.png");
+logo_sprite = Sprite(logo_image);
+
+fun refresh() {
+    logo_sprite.SetX(Window.GetWidth() / 2 - logo_image.GetWidth() / 2);
+    logo_sprite.SetY(Window.GetHeight() / 2 - logo_image.GetHeight() / 2);
+}
+refresh();
+Plymouth.SetRefreshFunction(refresh);
+
+Window.SetBackgroundTopColor(0.00, 0.47, 0.86);
+Window.SetBackgroundBottomColor(0.00, 0.47, 0.86);
