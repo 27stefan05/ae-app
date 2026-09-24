@@ -484,9 +484,9 @@
         }
     });
 
-    // Nach 3 Minuten ohne Tippen oder Antippen zurueck auf die Startseite.
+    // Nach 10 Minuten ohne Tippen oder Antippen zurueck auf die Startseite.
     // Offene Fenster zu, Suchfeld leer. Einstellungen werden dabei abgemeldet.
-    window.aeIdleMs = 3 * 60 * 1000;
+    window.aeIdleMs = 10 * 60 * 1000;
     (function () {
         var timer = null;
 
