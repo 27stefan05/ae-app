@@ -93,6 +93,12 @@ def get_next_fach():
             return i
     return max_mappen + 1
 
+# Standort des Kiosks. Ohne eigene Koordinaten in den Einstellungen
+# schaltet der Dark Mode nach Sonnenaufgang und Sonnenuntergang hier.
+DEFAULT_THEME_LAT = 48.76071585556061
+DEFAULT_THEME_LON = 11.502540053417018
+
+
 def get_theme_coords():
     def read(key):
         row = Setting.query.filter_by(key=key).first()
@@ -106,7 +112,7 @@ def get_theme_coords():
     lat = read('theme_lat')
     lon = read('theme_lon')
     if lat is None or lon is None:
-        return None, None
+        return DEFAULT_THEME_LAT, DEFAULT_THEME_LON
     return lat, lon
 
 

@@ -373,6 +373,12 @@ def test_login_page_explains_timeout(client):
     assert "Sitzung abgelaufen" in body
 
 
+def test_site_coordinates_are_the_default(client):
+    body = client.get("/").get_data(as_text=True)
+    assert "48.76071585556061" in body
+    assert "11.502540053417018" in body
+
+
 def test_dark_mode_toggle_is_on_every_page(client):
     body = client.get("/").get_data(as_text=True)
     assert 'id="themeToggle"' in body
