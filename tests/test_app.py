@@ -557,3 +557,20 @@ def test_restore_kommt_zurueck_in_mappe_der_ae(client):
     client.delete(f"/delete/{schein['id']}")
     assert client.post(f"/restore/{schein['id']}").status_code == 200
     assert all(s['fach'] == 1 for s in client.get('/scheine').get_json())
+
+
+def test_mappe_bleibt_belegt_solange_ein_vorgang_da_ist(client):
+    create_schein(client, '7401')                  # Vorgang 10, Mappe 1
+    create_schein(client, '7401', vorgang='20')    # Vorgang 20, Mappe 1
+    vorgang_10 = [s for s in client.get('/scheine').get_json() if s['vorgang'] == 10][0]
+    client.delete(f"/delete/{vorgang_10['id']}")
+
+    # Mappe 1 ist nicht frei: eine neue AE bekommt Mappe 2 ...
+    create_schein(client, '7402')
+    by_key = {(s['ae_nummer'], s['vorgang']): s['fach'] for s in client.get('/scheine').get_json()}
+    assert by_key == {('7401', 20): 1, ('7402', 10): 2}
+
+    # ... und ein neuer Vorgang von 7401 kommt wieder in Mappe 1.
+    create_schein(client, '7401', vorgang='30')
+    fach = [s['fach'] for s in client.get('/scheine').get_json() if s['vorgang'] == 30][0]
+    assert fach == 1
