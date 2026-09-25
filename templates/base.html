@@ -251,25 +251,6 @@
             background-color: #243140 !important;
             color: #e8eef6 !important;
         }
-        [data-bs-theme="dark"] .btn-outline-warning {
-            background-color: #3a3208;
-            border-color: #facc15;
-            color: #fde68a;
-        }
-        [data-bs-theme="dark"] .btn-outline-warning:hover {
-            background-color: #facc15;
-            color: #1c1404;
-        }
-        [data-bs-theme="dark"] .btn-outline-danger {
-            background-color: #3f1d1d;
-            border-color: #f87171;
-            color: #fecaca;
-        }
-        [data-bs-theme="dark"] .btn-outline-danger:hover {
-            background-color: #ef4444;
-            color: white;
-        }
-
         .theme-toggle {
             display: inline-flex;
             flex-direction: column;
@@ -318,72 +299,55 @@
             font-weight: 500; 
         }
         
-        .custom-action-btn {
-            height: 45px;
-            width: auto;
-            min-width: 85px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8em;
-            margin-right: 5px;
-            padding: 6px 10px;
-        }
-        
         .mappe-number {
             font-size: 3em;
             font-weight: bold;
         }
         
-        .bemerkung-info {
-            font-size: 1em;
-            color: rgb(230, 37, 46);
-        }
-        
-        .button-group {
-            display: flex !important;
-            flex-wrap: nowrap !important;
-            gap: 6px;
-            align-items: center;
-        }
-
-        /* === SCHÖNE BUTTON STYLES (wie früher) === */
-
-        /* Unterbrechung (Gelb) */
-        .btn-outline-warning {
-            background-color: #fffbeb;
-            border: 2px solid #facc15;
-            color: #854d0e;
-        }
-        .btn-outline-warning:hover {
-            background-color: #facc15;
-            border-color: #facc15;
-            color: black;
-        }
-
-        /* Bearbeiten (Blau) */
-        .btn-uniper-outline-secondary {
-            background-color: white;
-            border: 2px solid #0078DC;
-            color: #0078DC;
-        }
-        .btn-uniper-outline-secondary:hover {
-            background-color: #0078DC;
-            border-color: #0078DC;
-            color: white;
-        }
-
-        /* Fertig (Rot) */
+        /* === Aktions-Buttons ===
+           Unterbrechung, In Arbeit, Bearbeiten, Löschen, Neu, Abbrechen.
+           Getönte Fläche, kräftiger Rand, Text und Symbol in derselben Farbe.
+           Beim Antippen voll gefüllt. Text hat in beiden Modi mind. 7:1 Kontrast. */
+        .btn-outline-primary,
+        .btn-outline-secondary,
+        .btn-outline-success,
+        .btn-outline-warning,
         .btn-outline-danger {
-            background-color: #fef2f2;
-            border: 2px solid #ef4444;
-            color: #b91c1c;
+            --bs-btn-border-width: 2px;
+            --bs-btn-color: var(--act-text);
+            --bs-btn-bg: var(--act-bg);
+            --bs-btn-border-color: var(--act-border);
+            --bs-btn-hover-color: var(--act-solid-text);
+            --bs-btn-hover-bg: var(--act-solid);
+            --bs-btn-hover-border-color: var(--act-solid);
+            --bs-btn-active-color: var(--act-solid-text);
+            --bs-btn-active-bg: var(--act-solid);
+            --bs-btn-active-border-color: var(--act-solid);
+            --bs-btn-disabled-color: var(--act-text);
+            --bs-btn-disabled-bg: var(--act-bg);
+            --bs-btn-disabled-border-color: var(--act-border);
         }
-        .btn-outline-danger:hover {
-            background-color: #ef4444;
-            border-color: #ef4444;
-            color: white;
+        .btn-outline-primary   { --act-text: #004f99; --act-bg: #eef6ff; --act-border: #0078dc; --act-solid: #0067c0; --act-solid-text: #ffffff; }
+        .btn-outline-secondary { --act-text: #374151; --act-bg: #f3f4f6; --act-border: #6b7280; --act-solid: #4b5563; --act-solid-text: #ffffff; }
+        .btn-outline-success   { --act-text: #14532d; --act-bg: #ecfdf3; --act-border: #16a34a; --act-solid: #15803d; --act-solid-text: #ffffff; }
+        .btn-outline-warning   { --act-text: #713f12; --act-bg: #fffbeb; --act-border: #ca8a04; --act-solid: #facc15; --act-solid-text: #1c1404; }
+        .btn-outline-danger    { --act-text: #991b1b; --act-bg: #fef2f2; --act-border: #ef4444; --act-solid: #dc2626; --act-solid-text: #ffffff; }
+
+        [data-bs-theme="dark"] .btn-outline-primary   { --act-text: #d6eaff; --act-bg: #15304d; --act-border: #4da3ff; --act-solid: #4da3ff; --act-solid-text: #0b1520; }
+        [data-bs-theme="dark"] .btn-outline-secondary { --act-text: #e5e9f0; --act-bg: #263342; --act-border: #8b9bb0; --act-solid: #8b9bb0; --act-solid-text: #0b1520; }
+        [data-bs-theme="dark"] .btn-outline-success   { --act-text: #c8f7d8; --act-bg: #12351f; --act-border: #4ade80; --act-solid: #4ade80; --act-solid-text: #0b1520; }
+        [data-bs-theme="dark"] .btn-outline-warning   { --act-text: #fde68a; --act-bg: #3a3208; --act-border: #facc15; --act-solid: #facc15; --act-solid-text: #1c1404; }
+        [data-bs-theme="dark"] .btn-outline-danger    { --act-text: #fecaca; --act-bg: #421c1c; --act-border: #f87171; --act-solid: #f87171; --act-solid-text: #1c0b0b; }
+
+        /* Symbol im Button übernimmt die Textfarbe (SVG als Maske). */
+        .btn-icon {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            vertical-align: -3px;
+            background-color: currentColor;
+            -webkit-mask: var(--icon) center / contain no-repeat;
+            mask: var(--icon) center / contain no-repeat;
         }
     </style>
     {% block extra_css %}{% endblock %}
