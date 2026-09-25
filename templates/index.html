@@ -33,13 +33,10 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Neuen Schein anlegen?</h5>
+                <h5 class="modal-title" id="ausgebenTitle">Neuen Schein anlegen?</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body text-center">
-                <p>Die AE-Nummer <strong id="modalAeNummer"></strong> existiert noch nicht.</p>
-                <p>Möchten Sie einen neuen Schein anlegen?</p>
-            </div>
+            <div class="modal-body text-center" id="ausgebenBody"></div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
                 <button type="button" id="confirmAusgeben" class="btn btn-primary">Ja, anlegen</button>
@@ -317,7 +314,29 @@ function showAusgebenModal() {
         return;
     }
 
-    document.getElementById('modalAeNummer').textContent = ae;
+    // Gibt es die AE schon, wird ein weiterer Vorgang in derselben Mappe angelegt.
+    const vorhanden = allScheine.filter(s => String(s.ae_nummer) === ae);
+    const title = document.getElementById('ausgebenTitle');
+    const body = document.getElementById('ausgebenBody');
+    const confirmBtn = document.getElementById('confirmAusgeben');
+    if (vorhanden.length) {
+        const vorgaenge = vorhanden.map(s => s.vorgang).sort((a, b) => a - b).join(', ');
+        title.textContent = 'Schein existiert bereits';
+        body.innerHTML = `
+            <p>Die AE-Nummer <strong>${escapeHtml(ae)}</strong> existiert bereits
+               in Mappe <strong>${escapeHtml(vorhanden[0].fach)}</strong> (Vorgang ${escapeHtml(vorgaenge)}).</p>
+            <p>Möchten Sie einen weiteren Vorgang anlegen?</p>
+        `;
+        confirmBtn.textContent = 'Ja, weiteren Vorgang anlegen';
+    } else {
+        title.textContent = 'Neuen Schein anlegen?';
+        body.innerHTML = `
+            <p>Die AE-Nummer <strong>${escapeHtml(ae)}</strong> existiert noch nicht.</p>
+            <p>Möchten Sie einen neuen Schein anlegen?</p>
+        `;
+        confirmBtn.textContent = 'Ja, anlegen';
+    }
+
     const modal = new bootstrap.Modal(document.getElementById('ausgebenModal'));
     modal.show();
 

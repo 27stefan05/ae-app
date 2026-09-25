@@ -96,6 +96,23 @@ def get_next_fach():
             return i
     return None
 
+def get_fach_for_ae(ae_nummer):
+    """Mappe, in der die AE-Nummer schon liegt, sonst None.
+
+    Alle Vorgänge einer AE-Nummer kommen in dieselbe Mappe."""
+    if not ae_nummer:
+        return None
+    schein = Arbeitsschein.query.filter_by(ae_nummer=ae_nummer).first()
+    return schein.fach if schein else None
+
+def get_next_vorgang(ae_nummer):
+    """Kleinster freie Vorgang (10, 20, ...) für diese AE-Nummer."""
+    used = {s.vorgang for s in Arbeitsschein.query.filter_by(ae_nummer=ae_nummer)}
+    vorgang = 10
+    while vorgang in used:
+        vorgang += 10
+    return vorgang
+
 def mappen_voll_meldung():
     return (f"Alle {get_max_mappen()} Mappen sind belegt. Bitte erst einen fertigen Schein "
             "löschen oder die maximale Anzahl Mappen in den Einstellungen erhöhen.")
@@ -280,23 +297,28 @@ def eingabe():
 
         def render_error(message):
             max_vorgaenge = get_max_vorgaenge()
+            free_fach = get_next_fach()
             return render_template('eingabe.html', error=message,
                                    values=eingabe_form_values(),
                                    max_vorgaenge=max_vorgaenge, vorgang_options=get_vorgang_options(max_vorgaenge),
-                                   next_fach=get_next_fach(),
+                                   next_fach=get_fach_for_ae(ae_nummer) or free_fach,
+                                   free_fach=free_fach,
                                    orte=Ort.query.order_by(func.lower(Ort.name).asc()).all(),
                                    firmen=Firma.query.order_by(func.lower(Firma.name).asc()).all())
 
         if not ae_nummer:
             return render_error("AE-Nummer darf nicht leer sein.")
 
-        if get_next_fach() is None:
+        # Weiterer Vorgang einer vorhandenen AE: dieselbe Mappe, egal was im Formular stand.
+        fach = get_fach_for_ae(ae_nummer)
+        if fach is None and get_next_fach() is None:
             return render_error(mappen_voll_meldung())
 
         try:
             vorgang = parse_int(data.get('vorgang', 10), 'Vorgang', minimum=10)
             personen = parse_int(data.get('personen') or 0, 'Anzahl Mitarbeiter', minimum=0)
-            fach = parse_int(data.get('fach') or get_next_fach(), 'Mappe', minimum=1)
+            if fach is None:
+                fach = parse_int(data.get('fach') or get_next_fach(), 'Mappe', minimum=1)
         except ValueError as e:
             return render_error(str(e))
 
@@ -332,12 +354,17 @@ def eingabe():
         return redirect(url_for('index', neu=schein.id))
 
     max_vorgaenge = get_max_vorgaenge()
-    next_fach = get_next_fach()
+    values = eingabe_form_values()
+    free_fach = get_next_fach()
+    next_fach = get_fach_for_ae(values['ae_nummer']) or free_fach
+    # Von der Startseite mit vorhandener AE: nächsten freien Vorgang vorschlagen.
+    if values['ae_nummer'] and 'vorgang' not in request.args:
+        values['vorgang'] = str(get_next_vorgang(values['ae_nummer']))
     orte = Ort.query.order_by(func.lower(Ort.name).asc()).all()
     firmen = Firma.query.order_by(func.lower(Firma.name).asc()).all()
-    return render_template('eingabe.html', next_fach=next_fach, orte=orte, firmen=firmen,
+    return render_template('eingabe.html', next_fach=next_fach, free_fach=free_fach, orte=orte, firmen=firmen,
                            error=None if next_fach else mappen_voll_meldung(),
-                           values=eingabe_form_values(),
+                           values=values,
                            max_vorgaenge=max_vorgaenge, vorgang_options=get_vorgang_options(max_vorgaenge))
 
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
@@ -448,7 +475,11 @@ def restore_schein(id):
     if not entry:
         return jsonify({'error': 'Rückgängig ist nicht mehr möglich.'}), 410
     columns = entry[1]
-    if Arbeitsschein.query.filter_by(fach=columns['fach']).first():
+    ae_fach = get_fach_for_ae(columns['ae_nummer'])
+    if ae_fach is not None:
+        # Andere Vorgänge dieser AE liegen noch da: zurück in deren Mappe.
+        columns['fach'] = ae_fach
+    elif Arbeitsschein.query.filter_by(fach=columns['fach']).first():
         return jsonify({'error': f"Mappe {columns['fach']} ist inzwischen wieder belegt."}), 409
     db.session.add(Arbeitsschein(**columns))
     try:
