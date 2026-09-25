@@ -410,3 +410,32 @@ def test_theme_coords_reject_out_of_range(client):
     login(client)
     resp = client.post("/einstellungen", data={"theme_lat": "120", "theme_lon": "10"})
     assert "zwischen" in resp.get_data(as_text=True)
+
+
+def test_edit_keeps_renamed_firma_and_ort(client):
+    client.post('/eingabe', data={'ae_nummer': '4711', 'vorgang': '10', 'personen': '2',
+                                  'firma': 'Alt GmbH', 'ort': 'Halle 1'})
+    with app_module.app.app_context():
+        schein_id = app_module.Arbeitsschein.query.first().id
+        firma_id = app_module.Firma.query.filter_by(name='Alt GmbH').first().id
+        ort_id = app_module.Ort.query.filter_by(name='Halle 1').first().id
+
+    login(client)
+    client.put(f'/firma/{firma_id}', json={'name': 'Neu GmbH'})
+    client.delete(f'/ort/{ort_id}')
+
+    html = client.get(f'/edit/{schein_id}').get_data(as_text=True)
+    assert '<option value="Alt GmbH" selected>' in html
+    assert '<option value="Halle 1" selected>' in html
+
+
+def test_einstellungen_saves_limits_without_existing_rows(client):
+    login(client)
+    with app_module.app.app_context():
+        app_module.Setting.query.delete()
+        app_module.db.session.commit()
+    client.post('/einstellungen', data={'max_mappen': '50'})
+    client.post('/einstellungen', data={'max_vorgaenge': '90'})
+    with app_module.app.app_context():
+        assert app_module.Setting.query.filter_by(key='max_mappen').first().value == '50'
+        assert app_module.get_max_vorgaenge() == 90

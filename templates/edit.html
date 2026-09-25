@@ -66,6 +66,10 @@
                                     {{ firma.name }}
                                 </option>
                                 {% endfor %}
+                                {# Umbenannt oder gelöscht: alten Wert behalten, sonst leert Speichern das Feld #}
+                                {% if selected_firma and selected_firma not in firmen|map(attribute='name') %}
+                                <option value="{{ selected_firma }}" selected>{{ selected_firma }}</option>
+                                {% endif %}
                             </select>
                             <button type="button" class="btn btn-outline-primary" onclick="showNewFirmaModal()">Neu</button>
                         </div>
@@ -87,6 +91,10 @@
                                     {{ ort.name }}
                                 </option>
                                 {% endfor %}
+                                {# Umbenannt oder gelöscht: alten Wert behalten, sonst leert Speichern das Feld #}
+                                {% if selected_ort and selected_ort not in orte|map(attribute='name') %}
+                                <option value="{{ selected_ort }}" selected>{{ selected_ort }}</option>
+                                {% endif %}
                             </select>
                             <button type="button" class="btn btn-outline-primary" onclick="showNewOrtModal()">Neu</button>
                         </div>

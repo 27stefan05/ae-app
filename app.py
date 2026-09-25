@@ -425,9 +425,7 @@ def einstellungen():
         if 'max_mappen' in data:
             try:
                 value = parse_int(data['max_mappen'], 'Maximale Anzahl Mappen', minimum=1)
-                setting = Setting.query.filter_by(key='max_mappen').first()
-                if setting:
-                    setting.value = str(value)
+                upsert_setting('max_mappen', str(value))
                 db.session.commit()
             except ValueError as e:
                 import_error = str(e)
@@ -435,9 +433,7 @@ def einstellungen():
         if 'max_vorgaenge' in data:
             try:
                 value = parse_int(data['max_vorgaenge'], 'Maximale Vorgänge', minimum=10)
-                setting = Setting.query.filter_by(key='max_vorgaenge').first()
-                if setting:
-                    setting.value = str(value)
+                upsert_setting('max_vorgaenge', str(value))
                 db.session.commit()
             except ValueError as e:
                 import_error = str(e)
