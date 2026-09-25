@@ -333,11 +333,13 @@
         .btn-outline-warning   { --act-text: #713f12; --act-bg: #fffbeb; --act-border: #ca8a04; --act-solid: #facc15; --act-solid-text: #1c1404; }
         .btn-outline-danger    { --act-text: #991b1b; --act-bg: #fef2f2; --act-border: #ef4444; --act-solid: #dc2626; --act-solid-text: #ffffff; }
 
-        [data-bs-theme="dark"] .btn-outline-primary   { --act-text: #d6eaff; --act-bg: #15304d; --act-border: #4da3ff; --act-solid: #4da3ff; --act-solid-text: #0b1520; }
-        [data-bs-theme="dark"] .btn-outline-secondary { --act-text: #e5e9f0; --act-bg: #263342; --act-border: #8b9bb0; --act-solid: #8b9bb0; --act-solid-text: #0b1520; }
-        [data-bs-theme="dark"] .btn-outline-success   { --act-text: #c8f7d8; --act-bg: #12351f; --act-border: #4ade80; --act-solid: #4ade80; --act-solid-text: #0b1520; }
-        [data-bs-theme="dark"] .btn-outline-warning   { --act-text: #fde68a; --act-bg: #3a3208; --act-border: #facc15; --act-solid: #facc15; --act-solid-text: #1c1404; }
-        [data-bs-theme="dark"] .btn-outline-danger    { --act-text: #fecaca; --act-bg: #421c1c; --act-border: #f87171; --act-solid: #f87171; --act-solid-text: #1c0b0b; }
+        /* Dark Mode: alle Buttons mit weißer Schrift, die Farbe steckt in Fläche und Rand.
+           Farbige Schrift auf dunkler Fläche wirkte am Display blass. */
+        [data-bs-theme="dark"] .btn-outline-primary   { --act-text: #ffffff; --act-bg: #15304d; --act-border: #4da3ff; --act-solid: #4da3ff; --act-solid-text: #0b1520; }
+        [data-bs-theme="dark"] .btn-outline-secondary { --act-text: #ffffff; --act-bg: #263342; --act-border: #8b9bb0; --act-solid: #8b9bb0; --act-solid-text: #0b1520; }
+        [data-bs-theme="dark"] .btn-outline-success   { --act-text: #ffffff; --act-bg: #12351f; --act-border: #4ade80; --act-solid: #4ade80; --act-solid-text: #0b1520; }
+        [data-bs-theme="dark"] .btn-outline-warning   { --act-text: #ffffff; --act-bg: #3a3208; --act-border: #facc15; --act-solid: #facc15; --act-solid-text: #1c1404; }
+        [data-bs-theme="dark"] .btn-outline-danger    { --act-text: #ffffff; --act-bg: #421c1c; --act-border: #f87171; --act-solid: #f87171; --act-solid-text: #1c0b0b; }
 
         /* Symbol im Button übernimmt die Textfarbe (SVG als Maske). */
         .btn-icon {
