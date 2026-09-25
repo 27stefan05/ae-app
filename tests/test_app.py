@@ -425,8 +425,8 @@ def test_edit_keeps_renamed_firma_and_ort(client):
     client.delete(f'/ort/{ort_id}')
 
     html = client.get(f'/edit/{schein_id}').get_data(as_text=True)
-    assert '<option value="Alt GmbH" selected>' in html
-    assert '<option value="Halle 1" selected>' in html
+    assert 'name="firma" id="firmaValue" value="Alt GmbH"' in html
+    assert 'name="ort" id="ortValue" value="Halle 1"' in html
 
 
 def test_einstellungen_saves_limits_without_existing_rows(client):
@@ -574,3 +574,21 @@ def test_mappe_bleibt_belegt_solange_ein_vorgang_da_ist(client):
     create_schein(client, '7401', vorgang='30')
     fach = [s['fach'] for s in client.get('/scheine').get_json() if s['vorgang'] == 30][0]
     assert fach == 1
+
+
+def test_eingabe_picker_liefert_firmen_und_uebernimmt_neue(client):
+    login(client)
+    client.post('/firma', json={'name': "Bau & Söhne 'GmbH'"})
+    client.post('/firma', json={'name': 'Elektro Huber'})
+    html = client.get('/eingabe').get_data(as_text=True)
+    # Liste steht als JSON im Feld, Sonderzeichen sicher escaped
+    assert 'data-picker="firmaValue"' in html
+    assert 'Elektro Huber' in html
+    assert r'"Bau \u0026 S\u00f6hne \u0027GmbH\u0027"' in html
+
+    # Im Fenster neu eingegebener Name kommt als normaler Formularwert an
+    create_schein(client, '9001', firma='Ganz Neu AG', ort='Neue Halle')
+    schein = client.get('/scheine').get_json()[0]
+    assert (schein['firma'], schein['ort']) == ('Ganz Neu AG', 'Neue Halle')
+    html = client.get('/einstellungen').get_data(as_text=True)
+    assert 'Ganz Neu AG' in html and 'Neue Halle' in html

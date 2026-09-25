@@ -368,6 +368,17 @@
             border-top: 2px solid var(--tree-line);
         }
 
+        /* Auswahl mit Suche (Firma, Ort). Fenster oben, damit die
+           Bildschirmtastatur Suchfeld und Treffer nicht verdeckt. */
+        .picker-field { cursor: pointer; }
+        .picker-field.picker-empty { color: var(--bs-secondary-color); }
+        .picker-dialog { margin-top: 1.5rem; }
+        .picker-list { max-height: 45vh; overflow-y: auto; }
+        .picker-row { padding: 14px 18px; font-size: 1.15rem; }
+        .picker-new { color: var(--primary); font-weight: 500; }
+        .picker-row mark { padding: 0 1px; background: #fde68a; color: inherit; border-radius: 3px; }
+        [data-bs-theme="dark"] .picker-row mark { background: #6b5a12; }
+
         /* Symbol im Button übernimmt die Textfarbe (SVG als Maske). */
         .btn-icon {
             display: inline-block;
