@@ -1,0 +1,31 @@
+{# Auswahl mit Suche für Firma und Ort. Das Feld ist ein Knopf, der Wert steht
+   in einem versteckten Input und wird wie bisher mit dem Formular geschickt.
+   Neue Namen legt der Server beim Speichern an. #}
+
+{% macro picker_field(name, value, options, placeholder, title, new_label) %}
+<input type="hidden" name="{{ name }}" id="{{ name }}Value" value="{{ value or '' }}">
+<button type="button" class="form-select text-start picker-field" id="{{ name }}Picker"
+        data-picker="{{ name }}Value"
+        data-title="{{ title }}"
+        data-placeholder="{{ placeholder }}"
+        data-new-label="{{ new_label }}"
+        data-options='{{ options|map(attribute="name")|list|tojson }}'>{{ value or placeholder }}</button>
+{% endmacro %}
+
+{% macro picker_modal() %}
+<div class="modal" id="pickerModal" tabindex="-1" aria-labelledby="pickerTitle">
+    <div class="modal-dialog modal-lg picker-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="pickerTitle">Auswählen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen"></button>
+            </div>
+            <div class="p-3 border-bottom">
+                <input type="text" id="pickerSearch" class="form-control form-control-lg"
+                       placeholder="Suchen oder neuen Namen eingeben…" autocomplete="off">
+            </div>
+            <div id="pickerList" class="list-group list-group-flush picker-list"></div>
+        </div>
+    </div>
+</div>
+{% endmacro %}

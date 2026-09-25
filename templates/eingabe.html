@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_picker.html" import picker_field, picker_modal %}
 
 {% block title %}Neuer Arbeitsschein{% endblock %}
 
@@ -44,36 +45,14 @@
 
             <!-- Firma -->
             <div class="col-md-6">
-                <label class="form-label">Firma</label>
-                <div class="input-group">
-                    <select name="firma" class="form-select" id="firmaSelect">
-                        <option value="">-- Firma auswählen --</option>
-                        {% for firma in firmen %}
-                        <option value="{{ firma.name }}" 
-                            {% if values.firma == firma.name %}selected{% endif %}>
-                            {{ firma.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                    <button type="button" class="btn btn-outline-primary" onclick="showNewFirmaModal()">Neu</button>
-                </div>
+                <label class="form-label" for="firmaPicker">Firma</label>
+                {{ picker_field('firma', values.firma, firmen, '-- Firma auswählen --', 'Firma wählen', 'als neue Firma übernehmen') }}
             </div>
 
             <!-- Ort -->
             <div class="col-md-6">
-                <label class="form-label">Ort</label>
-                <div class="input-group">
-                    <select name="ort" class="form-select" id="ortSelect">
-                        <option value="">-- Ort auswählen --</option>
-                        {% for ort in orte %}
-                        <option value="{{ ort.name }}" 
-                            {% if values.ort == ort.name %}selected{% endif %}>
-                            {{ ort.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                    <button type="button" class="btn btn-outline-primary" onclick="showNewOrtModal()">Neu</button>
-                </div>
+                <label class="form-label" for="ortPicker">Ort</label>
+                {{ picker_field('ort', values.ort, orte, '-- Ort auswählen --', 'Ort wählen', 'als neuen Ort übernehmen') }}
             </div>
 
             <!-- Anzahl Mitarbeiter -->
@@ -104,100 +83,10 @@
     </form>
 </div>
 
-<!-- Neue Firma Modal -->
-<div class="modal" id="newFirmaModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Neue Firma anlegen</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <input type="text" id="newFirmaName" class="form-control" placeholder="Firmenname">
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
-                <button type="button" class="btn btn-primary" onclick="addNewFirma()">Anlegen & auswählen</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Neuer Ort Modal -->
-<div class="modal" id="newOrtModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Neuen Ort anlegen</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <input type="text" id="newOrtName" class="form-control" placeholder="Ortsname">
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
-                <button type="button" class="btn btn-primary" onclick="addNewOrt()">Anlegen & auswählen</button>
-            </div>
-        </div>
-    </div>
-</div>
+{{ picker_modal() }}
+<script src="/static/picker.js"></script>
 
 <script>
-function showNewFirmaModal() {
-    document.getElementById('newFirmaName').value = '';
-    new bootstrap.Modal(document.getElementById('newFirmaModal')).show();
-}
-
-function showNewOrtModal() {
-    document.getElementById('newOrtName').value = '';
-    new bootstrap.Modal(document.getElementById('newOrtModal')).show();
-}
-
-function currentFormParams() {
-    const params = new URLSearchParams();
-    document.querySelectorAll('form[action="/eingabe"] [name]').forEach(function(el) {
-        if (el.name) params.set(el.name, el.value);
-    });
-    return params;
-}
-
-function addNewFirma() {
-    const name = document.getElementById('newFirmaName').value.trim();
-    if (!name) return alert('Bitte Firmennamen eingeben');
-
-    const params = currentFormParams();
-    params.delete('firma');
-    params.set('preselect_firma', name);
-    window.location.href = '/eingabe?' + params.toString();
-}
-
-function addNewOrt() {
-    const name = document.getElementById('newOrtName').value.trim();
-    if (!name) return alert('Bitte Ortsnamen eingeben');
-
-    const params = currentFormParams();
-    params.delete('ort');
-    params.set('preselect_ort', name);
-    window.location.href = '/eingabe?' + params.toString();
-}
-
-// Automatische Auswahl nach Redirect
-document.addEventListener('DOMContentLoaded', function() {
-    const urlParams = new URLSearchParams(window.location.search);
-
-    const preselectFirma = urlParams.get('preselect_firma');
-    if (preselectFirma) {
-        const select = document.getElementById('firmaSelect');
-        if (select) select.value = preselectFirma;
-    }
-
-    const preselectOrt = urlParams.get('preselect_ort');
-    if (preselectOrt) {
-        const select = document.getElementById('ortSelect');
-        if (select) select.value = preselectOrt;
-    }
-});
-
 // Vorgang: Dropdown mit Ausweichfeld fuer Ausnahmen (z.B. Vorgang 11)
 const vorgangSelect = document.getElementById('vorgangSelect');
 const vorgangCustom = document.getElementById('vorgangCustom');

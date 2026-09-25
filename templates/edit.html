@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_picker.html" import picker_field, picker_modal %}
 
 {% block title %}Schein bearbeiten{% endblock %}
 
@@ -58,21 +59,7 @@
                         <h6 class="mb-0">Firma</h6>
                     </div>
                     <div class="card-body">
-                        <div class="input-group">
-                            <select name="firma" class="form-select" id="firmaSelect">
-                                <option value="">-- Firma auswählen --</option>
-                                {% for firma in firmen %}
-                                <option value="{{ firma.name }}" {{ 'selected' if firma.name == selected_firma else '' }}>
-                                    {{ firma.name }}
-                                </option>
-                                {% endfor %}
-                                {# Umbenannt oder gelöscht: alten Wert behalten, sonst leert Speichern das Feld #}
-                                {% if selected_firma and selected_firma not in firmen|map(attribute='name') %}
-                                <option value="{{ selected_firma }}" selected>{{ selected_firma }}</option>
-                                {% endif %}
-                            </select>
-                            <button type="button" class="btn btn-outline-primary" onclick="showNewFirmaModal()">Neu</button>
-                        </div>
+                        {{ picker_field('firma', selected_firma, firmen, '-- Firma auswählen --', 'Firma wählen', 'als neue Firma übernehmen') }}
                     </div>
                 </div>
             </div>
@@ -83,21 +70,7 @@
                         <h6 class="mb-0">Ort</h6>
                     </div>
                     <div class="card-body">
-                        <div class="input-group">
-                            <select name="ort" class="form-select" id="ortSelect">
-                                <option value="">-- Ort auswählen --</option>
-                                {% for ort in orte %}
-                                <option value="{{ ort.name }}" {{ 'selected' if ort.name == selected_ort else '' }}>
-                                    {{ ort.name }}
-                                </option>
-                                {% endfor %}
-                                {# Umbenannt oder gelöscht: alten Wert behalten, sonst leert Speichern das Feld #}
-                                {% if selected_ort and selected_ort not in orte|map(attribute='name') %}
-                                <option value="{{ selected_ort }}" selected>{{ selected_ort }}</option>
-                                {% endif %}
-                            </select>
-                            <button type="button" class="btn btn-outline-primary" onclick="showNewOrtModal()">Neu</button>
-                        </div>
+                        {{ picker_field('ort', selected_ort, orte, '-- Ort auswählen --', 'Ort wählen', 'als neuen Ort übernehmen') }}
                     </div>
                 </div>
             </div>
@@ -140,97 +113,10 @@
 
 </div>
 
-<!-- Neue Firma Modal -->
-<div class="modal" id="newFirmaModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Neue Firma hinzufügen</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <input type="text" id="newFirmaName" class="form-control" placeholder="Firmenname eingeben">
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
-                <button type="button" class="btn btn-primary" onclick="addNewFirma()">Hinzufügen & auswählen</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Neuer Ort Modal -->
-<div class="modal" id="newOrtModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Neuen Ort hinzufügen</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <input type="text" id="newOrtName" class="form-control" placeholder="Ort eingeben">
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
-                <button type="button" class="btn btn-primary" onclick="addNewOrt()">Hinzufügen & auswählen</button>
-            </div>
-        </div>
-    </div>
-</div>
+{{ picker_modal() }}
+<script src="/static/picker.js"></script>
 
 <script>
-// Modals
-function showNewFirmaModal() {
-    document.getElementById('newFirmaName').value = '';
-    new bootstrap.Modal(document.getElementById('newFirmaModal')).show();
-}
-
-function editDraftParams() {
-    const params = new URLSearchParams();
-    const vorgang = vorgangSelect.value === '__custom__' ? vorgangCustom.value : vorgangSelect.value;
-    if (vorgang) params.set('vorgang', vorgang);
-    const personen = document.querySelector('[name="personen"]');
-    const telefon = document.querySelector('[name="telefonnummer"]');
-    const bemerkung = document.querySelector('[name="bemerkung"]');
-    if (personen) params.set('personen', personen.value);
-    if (telefon) params.set('telefonnummer', telefon.value);
-    if (bemerkung) params.set('bemerkung', bemerkung.value);
-    return params;
-}
-
-function addNewFirma() {
-    const name = document.getElementById('newFirmaName').value.trim();
-    if (!name) return;
-    const params = editDraftParams();
-    const currentOrt = document.getElementById('ortSelect').value || '';
-    params.set('preselect_firma', name);
-    if (currentOrt) params.set('preselect_ort', currentOrt);
-    window.location.href = `/edit/{{ schein.id }}?` + params.toString();
-}
-
-function showNewOrtModal() {
-    document.getElementById('newOrtName').value = '';
-    new bootstrap.Modal(document.getElementById('newOrtModal')).show();
-}
-
-function addNewOrt() {
-    const name = document.getElementById('newOrtName').value.trim();
-    if (!name) return;
-    const params = editDraftParams();
-    const currentFirma = document.getElementById('firmaSelect').value || '';
-    params.set('preselect_ort', name);
-    if (currentFirma) params.set('preselect_firma', currentFirma);
-    window.location.href = `/edit/{{ schein.id }}?` + params.toString();
-}
-
-// Autofokus
-document.getElementById('newFirmaModal').addEventListener('shown.bs.modal', () => {
-    setTimeout(() => document.getElementById('newFirmaName').focus(), 150);
-});
-document.getElementById('newOrtModal').addEventListener('shown.bs.modal', () => {
-    setTimeout(() => document.getElementById('newOrtName').focus(), 150);
-});
-
 // Vorgang: Dropdown mit Ausweichfeld fuer Ausnahmen (z.B. Vorgang 11)
 const vorgangSelect = document.getElementById('vorgangSelect');
 const vorgangCustom = document.getElementById('vorgangCustom');
