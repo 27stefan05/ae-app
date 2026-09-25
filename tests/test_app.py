@@ -454,3 +454,63 @@ def test_eingabe_meldet_volle_mappen(client):
     assert 'Alle 2 Mappen sind belegt' in resp.get_data(as_text=True)
     with app_module.app.app_context():
         assert app_module.Arbeitsschein.query.count() == 2
+
+
+def test_eingabe_redirects_with_new_id(client):
+    resp = create_schein(client, '5555')
+    schein_id = client.get('/scheine').get_json()[0]['id']
+    assert resp.status_code == 302
+    assert resp.headers['Location'].endswith(f'/?neu={schein_id}')
+
+
+def test_restore_after_delete(client):
+    create_schein(client, '6001', firma='Alt GmbH', bemerkung='bitte zurück')
+    before = client.get('/scheine').get_json()[0]
+    client.delete(f"/delete/{before['id']}")
+    assert client.get('/scheine').get_json() == []
+
+    assert client.post(f"/restore/{before['id']}").status_code == 200
+    assert client.get('/scheine').get_json() == [before]
+    # Zweimal wiederherstellen geht nicht.
+    assert client.post(f"/restore/{before['id']}").status_code == 410
+
+
+def test_restore_fails_when_mappe_taken(client):
+    create_schein(client, '6002')
+    schein_id = client.get('/scheine').get_json()[0]['id']
+    client.delete(f'/delete/{schein_id}')
+    create_schein(client, '6003')  # bekommt dieselbe, jetzt freie Mappe
+    resp = client.post(f'/restore/{schein_id}')
+    assert resp.status_code == 409
+    assert 'Mappe 1' in resp.get_json()['error']
+
+
+def test_restore_expires(client, monkeypatch):
+    create_schein(client, '6004')
+    schein_id = client.get('/scheine').get_json()[0]['id']
+    client.delete(f'/delete/{schein_id}')
+    monkeypatch.setattr(app_module, 'UNDO_SECONDS', -1)
+    assert client.post(f'/restore/{schein_id}').status_code == 410
+
+
+def test_generate_pdf_copies_to_backup_dir(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(app_module, 'BACKUP_DIR', str(tmp_path))
+    filename = app_module.generate_pdf()
+    try:
+        with open(tmp_path / filename, 'rb') as handle:
+            assert handle.read(5) == b'%PDF-'
+    finally:
+        path = os.path.join(app_module.app.static_folder, filename)
+        if os.path.exists(path):
+            os.remove(path)
+
+
+def test_generate_pdf_ignores_missing_backup_dir(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(app_module, 'BACKUP_DIR', str(tmp_path / 'fehlt'))
+    filename = app_module.generate_pdf()
+    path = os.path.join(app_module.app.static_folder, filename)
+    try:
+        assert os.path.exists(path)
+    finally:
+        if os.path.exists(path):
+            os.remove(path)

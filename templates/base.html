@@ -428,8 +428,57 @@
         {% block content %}{% endblock %}
     </div>
 
+    <!-- Hinweis nach dem Löschen, mit Rückgängig -->
+    <div class="toast-container position-fixed bottom-0 start-50 translate-middle-x p-3">
+        <div id="undoToast" class="toast text-bg-dark border-0" role="status" aria-live="polite" data-bs-autohide="false" style="width: auto; max-width: 90vw;">
+            <div class="d-flex align-items-center gap-2 py-1">
+                <div class="toast-body fs-5 text-nowrap" id="undoToastText"></div>
+                <button type="button" id="undoToastBtn" class="btn btn-light btn-lg ms-auto me-2">Rückgängig</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/bootstrap.bundle.min.js"></script>
     <script>
+    // Nach dem Löschen 10 Sekunden lang "Rückgängig" anbieten.
+    // Der Server hält gelöschte Scheine dafür kurz vor (/restore/<id>).
+    window.aeOfferUndo = (function () {
+        var UNDO_MS = 10000;
+        var timer = null;
+
+        return function (id, text, onRestored) {
+            var el = document.getElementById('undoToast');
+            var btn = document.getElementById('undoToastBtn');
+            var toast = bootstrap.Toast.getOrCreateInstance(el);
+            document.getElementById('undoToastText').textContent = text;
+            btn.disabled = false;
+            btn.onclick = function () {
+                btn.disabled = true;
+                fetch('/restore/' + id, { method: 'POST' })
+                    .then(function (res) {
+                        return res.json()
+                            .catch(function () { return {}; })
+                            .then(function (data) { return { ok: res.ok, data: data }; });
+                    })
+                    .then(function (result) {
+                        toast.hide();
+                        if (!result.ok) {
+                            alert(result.data.error || 'Wiederherstellen fehlgeschlagen.');
+                            return;
+                        }
+                        if (onRestored) onRestored();
+                    })
+                    .catch(function () {
+                        toast.hide();
+                        alert('Wiederherstellen fehlgeschlagen.');
+                    });
+            };
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(function () { toast.hide(); }, UNDO_MS);
+            toast.show();
+        };
+    })();
+
     (function () {
         var btn = document.getElementById('themeToggle');
         var label = document.getElementById('themeToggleLabel');
