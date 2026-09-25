@@ -439,3 +439,18 @@ def test_einstellungen_saves_limits_without_existing_rows(client):
     with app_module.app.app_context():
         assert app_module.Setting.query.filter_by(key='max_mappen').first().value == '50'
         assert app_module.get_max_vorgaenge() == 90
+
+
+def test_eingabe_meldet_volle_mappen(client):
+    with app_module.app.app_context():
+        app_module.db.session.add(app_module.Setting(key='max_mappen', value='2'))
+        app_module.db.session.commit()
+    for ae in ('1001', '1002'):
+        client.post('/eingabe', data={'ae_nummer': ae, 'vorgang': '10', 'personen': '1'})
+
+    assert 'Alle 2 Mappen sind belegt' in client.get('/eingabe').get_data(as_text=True)
+
+    resp = client.post('/eingabe', data={'ae_nummer': '1003', 'vorgang': '10', 'personen': '1', 'fach': '3'})
+    assert 'Alle 2 Mappen sind belegt' in resp.get_data(as_text=True)
+    with app_module.app.app_context():
+        assert app_module.Arbeitsschein.query.count() == 2

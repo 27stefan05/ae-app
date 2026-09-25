@@ -82,16 +82,23 @@ class Setting(db.Model):
     value = db.Column(db.String(50))
 
 # ===================== HILFSFUNKTIONEN =====================
-def get_next_fach():
-    used = {s.fach for s in Arbeitsschein.query.all()}
-    max_mappen = 300
+def get_max_mappen():
     setting = Setting.query.filter_by(key='max_mappen').first()
-    if setting:
-        max_mappen = int(setting.value)
-    for i in range(1, max_mappen + 1):
+    return int(setting.value) if setting else 300
+
+def get_next_fach():
+    """Kleinste freie Mappe oder None, wenn alle belegt sind.
+
+    Eine Mappe wird erst frei, wenn der Schein gelöscht ist."""
+    used = {s.fach for s in Arbeitsschein.query.all()}
+    for i in range(1, get_max_mappen() + 1):
         if i not in used:
             return i
-    return max_mappen + 1
+    return None
+
+def mappen_voll_meldung():
+    return (f"Alle {get_max_mappen()} Mappen sind belegt. Bitte erst einen fertigen Schein "
+            "löschen oder die maximale Anzahl Mappen in den Einstellungen erhöhen.")
 
 # Standort des Kiosks. Ohne eigene Koordinaten in den Einstellungen
 # schaltet der Dark Mode nach Sonnenaufgang und Sonnenuntergang hier.
@@ -283,6 +290,9 @@ def eingabe():
         if not ae_nummer:
             return render_error("AE-Nummer darf nicht leer sein.")
 
+        if get_next_fach() is None:
+            return render_error(mappen_voll_meldung())
+
         try:
             vorgang = parse_int(data.get('vorgang', 10), 'Vorgang', minimum=10)
             personen = parse_int(data.get('personen') or 0, 'Anzahl Mitarbeiter', minimum=0)
@@ -325,6 +335,7 @@ def eingabe():
     orte = Ort.query.order_by(func.lower(Ort.name).asc()).all()
     firmen = Firma.query.order_by(func.lower(Firma.name).asc()).all()
     return render_template('eingabe.html', next_fach=next_fach, orte=orte, firmen=firmen,
+                           error=None if next_fach else mappen_voll_meldung(),
                            values=eingabe_form_values(),
                            max_vorgaenge=max_vorgaenge, vorgang_options=get_vorgang_options(max_vorgaenge))
 
