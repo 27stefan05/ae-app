@@ -2,6 +2,47 @@
 
 {% block title %}Arbeitsscheine Verwaltung{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Fenster "Neuer Schein" auf der Startseite */
+    .ae-dialog-nummer {
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: .02em;
+        line-height: 1.2;
+    }
+    .ae-dialog-tiles {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin: 20px 0;
+    }
+    .ae-dialog-tile {
+        padding: 12px;
+        border-radius: 12px;
+        background: var(--bs-tertiary-bg);
+        border: 1px solid var(--bs-border-color);
+    }
+    .ae-dialog-tile .label {
+        font-size: .85rem;
+        color: var(--bs-secondary-color);
+    }
+    .ae-dialog-tile .value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+    #ausgebenModal .modal-footer {
+        flex-wrap: nowrap;
+        gap: 12px;
+    }
+    #ausgebenModal .modal-footer .btn {
+        flex: 1 1 0;
+        margin: 0;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid px-4 py-4">
 
@@ -38,8 +79,8 @@
             </div>
             <div class="modal-body text-center" id="ausgebenBody"></div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
-                <button type="button" id="confirmAusgeben" class="btn btn-primary">Ja, anlegen</button>
+                <button type="button" class="btn btn-secondary btn-lg" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" id="confirmAusgeben" class="btn btn-primary btn-lg">Anlegen</button>
             </div>
         </div>
     </div>
@@ -321,20 +362,30 @@ function showAusgebenModal() {
     const confirmBtn = document.getElementById('confirmAusgeben');
     if (vorhanden.length) {
         const vorgaenge = vorhanden.map(s => s.vorgang).sort((a, b) => a - b).join(', ');
-        title.textContent = 'Schein existiert bereits';
+        title.textContent = 'AE existiert bereits';
         body.innerHTML = `
-            <p>Die AE-Nummer <strong>${escapeHtml(ae)}</strong> existiert bereits
-               in Mappe <strong>${escapeHtml(vorhanden[0].fach)}</strong> (Vorgang ${escapeHtml(vorgaenge)}).</p>
-            <p>Möchten Sie einen weiteren Vorgang anlegen?</p>
+            <div class="ae-dialog-nummer">AE ${escapeHtml(ae)}</div>
+            <div class="ae-dialog-tiles">
+                <div class="ae-dialog-tile">
+                    <div class="label">Mappe</div>
+                    <div class="value">${escapeHtml(vorhanden[0].fach)}</div>
+                </div>
+                <div class="ae-dialog-tile">
+                    <div class="label">${vorhanden.length === 1 ? 'Vorgang' : 'Vorgänge'}</div>
+                    <div class="value">${escapeHtml(vorgaenge)}</div>
+                </div>
+            </div>
+            <p class="fs-5 mb-0">Weiteren Vorgang in dieser Mappe anlegen?</p>
         `;
-        confirmBtn.textContent = 'Ja, weiteren Vorgang anlegen';
+        confirmBtn.textContent = 'Vorgang anlegen';
     } else {
-        title.textContent = 'Neuen Schein anlegen?';
+        title.textContent = 'Neuer Schein';
         body.innerHTML = `
-            <p>Die AE-Nummer <strong>${escapeHtml(ae)}</strong> existiert noch nicht.</p>
-            <p>Möchten Sie einen neuen Schein anlegen?</p>
+            <div class="ae-dialog-nummer">AE ${escapeHtml(ae)}</div>
+            <p class="text-body-secondary mt-2 mb-3">Diese AE-Nummer gibt es noch nicht.</p>
+            <p class="fs-5 mb-0">Neuen Schein anlegen?</p>
         `;
-        confirmBtn.textContent = 'Ja, anlegen';
+        confirmBtn.textContent = 'Anlegen';
     }
 
     const modal = new bootstrap.Modal(document.getElementById('ausgebenModal'));
