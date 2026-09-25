@@ -264,7 +264,9 @@ function showStatusModal(id, newStatus, aeNummer, vorgang, fach) {
             window.aeShowMappeAfterClose = {
                 aeNummer: aeNummer,
                 vorgang: vorgang,
-                fach: fach
+                fach: fach,
+                // In Arbeit: Schein wird aus der Mappe geholt. Unterbrechung: kommt zurück hinein.
+                text: newStatus === 'in arbeit' ? 'Der Schein ist in' : 'Der Schein gehört in'
             };
             modal.hide();
             loadAllScheine();
@@ -280,9 +282,9 @@ function showStatusModal(id, newStatus, aeNummer, vorgang, fach) {
 function showMappeModal(info) {
     document.getElementById('mappeModalBody').innerHTML = `
         <p>AE <strong>${escapeHtml(info.aeNummer)}</strong>, Vorgang ${escapeHtml(info.vorgang)}</p>
-        <p class="text-muted mb-1">Der Schein gehört in</p>
-        <div class="mappe-number">${escapeHtml(info.fach)}</div>
+        <p class="text-muted mb-1">${escapeHtml(info.text || 'Der Schein gehört in')}</p>
         <div class="fs-4">Mappe</div>
+        <div class="mappe-number">${escapeHtml(info.fach)}</div>
     `;
     new bootstrap.Modal(document.getElementById('mappeModal')).show();
 }
