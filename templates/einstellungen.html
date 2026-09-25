@@ -291,28 +291,48 @@ function addFirma(e) {
     .catch(() => alert('Firma konnte nicht gespeichert werden.'));
 }
 
+// Bei Fehlern (z.B. Name existiert schon) Meldung zeigen statt still neu zu laden.
+// 401 heisst abgelaufene Sitzung, dann fuehrt das Neuladen zum Login.
+function reloadAfter(request, fallbackMessage) {
+    request
+        .then(res => {
+            if (res.ok || res.status === 401) {
+                location.reload();
+                return;
+            }
+            return res.json()
+                .catch(() => ({}))
+                .then(data => alert(data.error || fallbackMessage));
+        })
+        .catch(() => alert(fallbackMessage));
+}
+
 function editOrt(id, currentName) {
     const newName = prompt('Neuen Namen eingeben:', currentName);
     if (!newName || newName === currentName) return;
-    fetch(`/ort/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: newName}) })
-    .then(() => location.reload());
+    reloadAfter(
+        fetch(`/ort/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: newName}) }),
+        'Ort konnte nicht umbenannt werden.'
+    );
 }
 
 function editFirma(id, currentName) {
     const newName = prompt('Neuen Namen eingeben:', currentName);
     if (!newName || newName === currentName) return;
-    fetch(`/firma/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: newName}) })
-    .then(() => location.reload());
+    reloadAfter(
+        fetch(`/firma/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: newName}) }),
+        'Firma konnte nicht umbenannt werden.'
+    );
 }
 
 function deleteOrt(id) {
     if (!confirm('Ort wirklich löschen?')) return;
-    fetch(`/ort/${id}`, { method: 'DELETE' }).then(() => location.reload());
+    reloadAfter(fetch(`/ort/${id}`, { method: 'DELETE' }), 'Ort konnte nicht gelöscht werden.');
 }
 
 function deleteFirma(id) {
     if (!confirm('Firma wirklich löschen?')) return;
-    fetch(`/firma/${id}`, { method: 'DELETE' }).then(() => location.reload());
+    reloadAfter(fetch(`/firma/${id}`, { method: 'DELETE' }), 'Firma konnte nicht gelöscht werden.');
 }
 
 document.getElementById('generatePdfBtn').addEventListener('click', function() {

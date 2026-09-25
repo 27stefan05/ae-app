@@ -35,6 +35,10 @@ if ! id "$KIOSK_USER" >/dev/null 2>&1; then
     exit 1
 fi
 
+# Die App laeuft als $KIOSK_USER und schreibt in instance/ und static/.
+# Wurde das Projekt als root kopiert oder geklont, klappt sonst schon venv nicht.
+chown -R "$KIOSK_USER:$KIOSK_USER" "$APP_DIR"
+
 echo "==> Installiere System-Pakete..."
 apt update
 apt install -y python3 python3-venv python3-pip \
