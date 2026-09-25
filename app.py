@@ -328,7 +328,8 @@ def eingabe():
             db.session.rollback()
             return render_error("Diese AE-Nummer mit diesem Vorgang existiert bereits!")
 
-        return redirect('/')
+        # Startseite zeigt dann an, in welche Mappe der Schein gehört.
+        return redirect(url_for('index', neu=schein.id))
 
     max_vorgaenge = get_max_vorgaenge()
     next_fach = get_next_fach()
@@ -413,14 +414,49 @@ def change_status(id):
     db.session.commit()
     return jsonify({'message': 'Status geändert'})
 
+# Gelöschte Scheine bleiben kurz im Speicher, damit "Rückgängig" geht.
+# Die Oberfläche bietet das 10 Sekunden an, der Server hält etwas länger.
+# Nach einem Neustart ist die Liste leer, das ist gewollt.
+UNDO_SECONDS = 60
+recently_deleted = {}
+
+
+def forget_old_deletions():
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=UNDO_SECONDS)
+    for key, (deleted_at, _) in list(recently_deleted.items()):
+        if deleted_at < cutoff:
+            recently_deleted.pop(key, None)
+
+
 @app.route('/delete/<int:id>', methods=['DELETE'])
 def delete_schein(id):
     schein = db.session.get(Arbeitsschein, id)
     if not schein:
         return jsonify({'error': 'Arbeitsschein nicht gefunden'}), 404
+    columns = {c.name: getattr(schein, c.name) for c in Arbeitsschein.__table__.columns}
     db.session.delete(schein)
     db.session.commit()
+    forget_old_deletions()
+    recently_deleted[id] = (datetime.now(timezone.utc), columns)
     return jsonify({'message': 'Arbeitsschein erfolgreich gelöscht'})
+
+
+@app.route('/restore/<int:id>', methods=['POST'])
+def restore_schein(id):
+    forget_old_deletions()
+    entry = recently_deleted.pop(id, None)
+    if not entry:
+        return jsonify({'error': 'Rückgängig ist nicht mehr möglich.'}), 410
+    columns = entry[1]
+    if Arbeitsschein.query.filter_by(fach=columns['fach']).first():
+        return jsonify({'error': f"Mappe {columns['fach']} ist inzwischen wieder belegt."}), 409
+    db.session.add(Arbeitsschein(**columns))
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'Diese AE-Nummer mit diesem Vorgang existiert inzwischen wieder.'}), 409
+    return jsonify({'message': 'Arbeitsschein wiederhergestellt'})
 
 @app.route('/einstellungen', methods=['GET', 'POST'])
 def einstellungen():
@@ -636,8 +672,7 @@ def pdf_safe(value):
     )
 
 
-def cleanup_old_pdfs():
-    folder = app.static_folder
+def cleanup_old_pdfs(folder):
     if not folder or not os.path.isdir(folder):
         return
     cutoff = datetime.now() - timedelta(days=BACKUP_RETENTION_DAYS)
@@ -734,8 +769,23 @@ def generate_pdf():
             title_style,
         )
         doc.build([title, Spacer(1, 0.4 * cm), table])
-        cleanup_old_pdfs()
+        cleanup_old_pdfs(app.static_folder)
+        copy_pdf_to_backup_dir(filepath)
         return filename
+
+
+def copy_pdf_to_backup_dir(filepath):
+    """Legt das PDF zusätzlich auf die externe SSD. Fehler dort brechen den Export nicht ab."""
+    if not BACKUP_DIR:
+        return
+    if not os.path.isdir(BACKUP_DIR):
+        app.logger.warning('PDF nicht auf SSD kopiert: %s nicht erreichbar', BACKUP_DIR)
+        return
+    try:
+        shutil.copy2(filepath, os.path.join(BACKUP_DIR, os.path.basename(filepath)))
+        cleanup_old_pdfs(BACKUP_DIR)
+    except OSError:
+        app.logger.exception('PDF konnte nicht auf die SSD kopiert werden')
 
 
 def run_scheduled(job):

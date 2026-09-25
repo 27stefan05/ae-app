@@ -189,6 +189,7 @@ document.getElementById('scheineListe').addEventListener('click', function(e) {
                     if (!res.ok) throw new Error('Löschen fehlgeschlagen');
                     modal.hide();
                     loadAllScheine();
+                    window.aeOfferUndo(id, `AE ${schein.ae_nummer} (Vorgang ${schein.vorgang}) gelöscht`, loadAllScheine);
                 })
                 .catch(() => alert('Fehler beim Löschen!'));
         };

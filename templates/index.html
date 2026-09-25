@@ -115,7 +115,7 @@ function escapeHtml(value) {
 }
 
 function loadAllScheine() {
-    fetch('/scheine')
+    return fetch('/scheine')
         .then(res => res.json())
         .then(data => {
             allScheine = data;
@@ -302,6 +302,7 @@ function showDeleteModal(id, aeNummer, vorgang) {
                 modal.hide();
                 loadAllScheine();
                 document.getElementById('ae_nummer').value = '';
+                window.aeOfferUndo(id, `AE ${aeNummer} (Vorgang ${vorgang}) gelöscht`, loadAllScheine);
             })
             .catch(err => alert('Fehler beim Löschen: ' + err.message));
     };
@@ -330,7 +331,17 @@ function limitInput(input) {
 }
 
 window.onload = function() {
-    loadAllScheine();
+    // Nach "Neuer Schein" kommt /?neu=<id>: dann die Mappe anzeigen.
+    // Parameter gleich entfernen, damit Neuladen das Fenster nicht erneut zeigt.
+    const neuId = parseInt(new URLSearchParams(location.search).get('neu'), 10);
+    if (neuId) history.replaceState(null, '', '/');
+
+    loadAllScheine().then(() => {
+        const schein = neuId ? allScheine.find(s => s.id === neuId) : null;
+        if (schein) {
+            showMappeModal({ aeNummer: schein.ae_nummer, vorgang: schein.vorgang, fach: schein.fach });
+        }
+    });
     document.getElementById('ae_nummer').focus();
 };
 
