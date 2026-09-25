@@ -119,10 +119,12 @@ function renderListe() {
         return;
     }
 
-    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    // Geblättert wird nach AE-Gruppen, damit Vorgänge einer AE zusammen bleiben.
+    const groups = groupByAe(filtered);
+    const totalPages = Math.max(1, Math.ceil(groups.length / PAGE_SIZE));
     if (currentPage > totalPages) currentPage = totalPages;
     const start = (currentPage - 1) * PAGE_SIZE;
-    const pageItems = filtered.slice(start, start + PAGE_SIZE);
+    const pageGroups = groups.slice(start, start + PAGE_SIZE);
 
     if (totalPages > 1) {
         pagination.classList.remove('d-none');
@@ -136,7 +138,49 @@ function renderListe() {
         pagination.classList.remove('d-flex');
     }
 
-    container.innerHTML = pageItems.map(s => `
+    container.innerHTML = pageGroups.map(group =>
+        group.length === 1 ? renderEinzelKarte(group[0]) : renderGruppenKarte(group)
+    ).join('');
+}
+
+function groupByAe(scheine) {
+    const groups = [];
+    const byAe = {};
+    scheine.forEach(s => {
+        const key = String(s.ae_nummer);
+        if (!byAe[key]) {
+            byAe[key] = [];
+            groups.push(byAe[key]);
+        }
+        byAe[key].push(s);
+    });
+    groups.forEach(g => g.sort((a, b) => a.vorgang - b.vorgang));
+    return groups;
+}
+
+function detailsHtml(s) {
+    return `
+        <div class="small">
+            <strong>Firma:</strong> ${escapeHtml(s.firma) || '-'} &nbsp;&nbsp;
+            <strong>Ort:</strong> ${escapeHtml(s.ort) || '-'} &nbsp;&nbsp;
+            <strong>Mitarbeiter:</strong> ${s.personen} &nbsp;&nbsp;
+            <strong>Telefon:</strong> ${escapeHtml(s.telefonnummer) || '-'}
+        </div>
+        ${s.bemerkung ? `<div class="mt-1 text-danger small"><strong>Bemerkung:</strong> ${escapeHtml(s.bemerkung)}</div>` : ''}`;
+}
+
+function buttonsHtml() {
+    return `
+        <button data-action="edit" class="btn btn-sm btn-outline-primary">
+            <span class="btn-icon" style="--icon: url(/static/stift.svg)" aria-hidden="true"></span> Bearbeiten
+        </button>
+        <button data-action="delete" class="btn btn-sm btn-outline-danger">
+            <span class="btn-icon" style="--icon: url(/static/muell.svg)" aria-hidden="true"></span> Löschen
+        </button>`;
+}
+
+function renderEinzelKarte(s) {
+    return `
         <div class="list-group-item p-0 mb-2 border rounded" data-id="${s.id}">
             <div class="px-3 py-2 d-flex justify-content-between align-items-center"
                  style="background-color:#0078DC; color:white; border-radius:6px 6px 0 0;">
@@ -147,25 +191,32 @@ function renderListe() {
                 </div>
                 ${statusBadge(s.status)}
             </div>
-            <div class="px-3 py-2">
-                <div class="small">
-                    <strong>Firma:</strong> ${escapeHtml(s.firma) || '-'} &nbsp;&nbsp;
-                    <strong>Ort:</strong> ${escapeHtml(s.ort) || '-'} &nbsp;&nbsp;
-                    <strong>Mitarbeiter:</strong> ${s.personen} &nbsp;&nbsp;
-                    <strong>Telefon:</strong> ${escapeHtml(s.telefonnummer) || '-'}
+            <div class="px-3 py-2">${detailsHtml(s)}</div>
+            <div class="px-3 pb-2 d-flex justify-content-end gap-2">${buttonsHtml()}</div>
+        </div>`;
+}
+
+function renderGruppenKarte(group) {
+    const first = group[0];
+    const rows = group.map(s => `
+        <div class="tree-row" data-id="${s.id}">
+            <div class="d-flex justify-content-between align-items-center gap-3">
+                <div>
+                    <div class="fw-bold">Vorgang ${s.vorgang} <span class="ms-1">${statusBadge(s.status)}</span></div>
+                    ${detailsHtml(s)}
                 </div>
-                ${s.bemerkung ? `<div class="mt-1 text-danger small"><strong>Bemerkung:</strong> ${escapeHtml(s.bemerkung)}</div>` : ''}
+                <div class="d-flex gap-2 flex-shrink-0">${buttonsHtml()}</div>
             </div>
-            <div class="px-3 pb-2 d-flex justify-content-end gap-2">
-                <button data-action="edit" class="btn btn-sm btn-outline-primary">
-                    <span class="btn-icon" style="--icon: url(/static/stift.svg)" aria-hidden="true"></span> Bearbeiten
-                </button>
-                <button data-action="delete" class="btn btn-sm btn-outline-danger">
-                    <span class="btn-icon" style="--icon: url(/static/muell.svg)" aria-hidden="true"></span> Löschen
-                </button>
+        </div>`).join('');
+    return `
+        <div class="list-group-item p-0 mb-2 border rounded">
+            <div class="px-3 py-2 d-flex justify-content-between align-items-center"
+                 style="background-color:#0078DC; color:white; border-radius:6px 6px 0 0;">
+                <div><strong>AE ${escapeHtml(first.ae_nummer)}</strong> &nbsp;&nbsp; <span>Mappe ${first.fach}</span></div>
+                <span>${group.length} Vorgänge</span>
             </div>
-        </div>
-    `).join('');
+            <div class="pb-1">${rows}</div>
+        </div>`;
 }
 
 document.getElementById('scheineListe').addEventListener('click', function(e) {

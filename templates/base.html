@@ -341,6 +341,33 @@
         [data-bs-theme="dark"] .btn-outline-warning   { --act-text: #ffffff; --act-bg: #3a3208; --act-border: #facc15; --act-solid: #facc15; --act-solid-text: #1c1404; }
         [data-bs-theme="dark"] .btn-outline-danger    { --act-text: #ffffff; --act-bg: #421c1c; --act-border: #f87171; --act-solid: #f87171; --act-solid-text: #1c0b0b; }
 
+        /* Mehrere Vorgänge einer AE: eine Karte, Vorgänge als Äste darunter. */
+        :root { --tree-line: #b8c7d9; }
+        [data-bs-theme="dark"] { --tree-line: #4a5d75; }
+        .tree-row {
+            position: relative;
+            margin-left: 28px;
+            padding: 10px 16px 10px 20px;
+            border-top: 1px solid var(--bs-border-color);
+        }
+        .tree-row::before {
+            content: "";
+            position: absolute;
+            left: -14px;
+            top: 0;
+            bottom: 0;
+            border-left: 2px solid var(--tree-line);
+        }
+        .tree-row:last-child::before { bottom: 50%; }
+        .tree-row::after {
+            content: "";
+            position: absolute;
+            left: -14px;
+            top: 50%;
+            width: 22px;
+            border-top: 2px solid var(--tree-line);
+        }
+
         /* Symbol im Button übernimmt die Textfarbe (SVG als Maske). */
         .btn-icon {
             display: inline-block;

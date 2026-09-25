@@ -161,6 +161,93 @@ function loadAllScheine() {
         });
 }
 
+function groupByAe(scheine) {
+    const groups = [];
+    const byAe = {};
+    scheine.forEach(s => {
+        const key = String(s.ae_nummer);
+        if (!byAe[key]) {
+            byAe[key] = [];
+            groups.push(byAe[key]);
+        }
+        byAe[key].push(s);
+    });
+    groups.forEach(g => g.sort((a, b) => a.vorgang - b.vorgang));
+    return groups;
+}
+
+function isActive(s) {
+    return s.status === 'ausgegeben' || s.status === 'in arbeit';
+}
+
+function detailsHtml(s) {
+    return `
+        <div class="small">
+            <strong>Firma:</strong> ${escapeHtml(s.firma) || '-'} &nbsp;&nbsp;
+            <strong>Ort:</strong> ${escapeHtml(s.ort) || '-'} &nbsp;&nbsp;
+            <strong>Mitarbeiter:</strong> ${s.personen} &nbsp;&nbsp;
+            <strong>Telefon:</strong> ${escapeHtml(s.telefonnummer) || '-'}
+        </div>
+        ${s.bemerkung ? `<div class="mt-1 text-danger small"><strong>Bemerkung:</strong> ${escapeHtml(s.bemerkung)}</div>` : ''}`;
+}
+
+function buttonsHtml(s) {
+    return `
+        ${isActive(s)
+            ? `<button data-action="status" data-newstatus="zurueckgegeben" class="btn btn-sm btn-outline-warning">
+                <span class="btn-icon" style="--icon: url(/static/pause.svg)" aria-hidden="true"></span> Unterbrechung
+               </button>`
+            : `<button data-action="status" data-newstatus="in arbeit" class="btn btn-sm btn-outline-success">
+                <span class="btn-icon" style="--icon: url(/static/helm.svg)" aria-hidden="true"></span> In Arbeit
+               </button>`
+        }
+        <button data-action="edit" class="btn btn-sm btn-outline-primary">
+            <span class="btn-icon" style="--icon: url(/static/stift.svg)" aria-hidden="true"></span> Bearbeiten
+        </button>
+        <button data-action="delete" class="btn btn-sm btn-outline-danger">
+            <span class="btn-icon" style="--icon: url(/static/muell.svg)" aria-hidden="true"></span> Löschen
+        </button>`;
+}
+
+function renderEinzelKarte(s, color) {
+    return `
+    <div class="list-group-item list-group-item-action p-0 mb-2 border rounded" data-id="${s.id}">
+        <div style="background-color: ${color}; color: white; border-radius: 6px 6px 0 0;" class="px-3 py-2">
+            <strong>AE ${escapeHtml(s.ae_nummer)}</strong> &nbsp;&nbsp;
+            <span>Vorgang ${s.vorgang}</span> &nbsp;&nbsp;
+            <span>Mappe ${s.fach}</span>
+        </div>
+        <div class="px-3 py-2">${detailsHtml(s)}</div>
+        <div class="px-3 pb-2 d-flex justify-content-end gap-2">${buttonsHtml(s)}</div>
+    </div>`;
+}
+
+function renderGruppenKarte(group, color) {
+    const first = group[0];
+    const rows = group.map(s => `
+        <div class="tree-row" data-id="${s.id}">
+            <div class="d-flex justify-content-between align-items-center gap-3">
+                <div>
+                    <div class="fw-bold">
+                        Vorgang ${s.vorgang}
+                        ${isActive(s) ? '' : '<span class="badge bg-secondary ms-1">unterbrochen</span>'}
+                    </div>
+                    ${detailsHtml(s)}
+                </div>
+                <div class="d-flex gap-2 flex-shrink-0">${buttonsHtml(s)}</div>
+            </div>
+        </div>`).join('');
+    return `
+    <div class="list-group-item p-0 mb-2 border rounded">
+        <div style="background-color: ${color}; color: white; border-radius: 6px 6px 0 0;"
+             class="px-3 py-2 d-flex justify-content-between">
+            <span><strong>AE ${escapeHtml(first.ae_nummer)}</strong> &nbsp;&nbsp; <span>Mappe ${first.fach}</span></span>
+            <span>${group.length} Vorgänge</span>
+        </div>
+        <div class="pb-1">${rows}</div>
+    </div>`;
+}
+
 function renderScheineListe(filteredScheine) {
     const container = document.getElementById('scheineListe');
     container.innerHTML = '';
@@ -176,49 +263,10 @@ function renderScheineListe(filteredScheine) {
         return;
     }
 
-    const html = filteredScheine.map((s, index) => {
+    // Vorgänge einer AE-Nummer als eine Karte (Baum), einzelne wie bisher.
+    const html = groupByAe(filteredScheine).map((group, index) => {
         const color = uniperColors[index % uniperColors.length];
-        const isActive = s.status === 'ausgegeben' || s.status === 'in arbeit';
-
-        return `
-        <div class="list-group-item list-group-item-action p-0 mb-2 border rounded" data-id="${s.id}">
-
-            <!-- Farbige Zeile oben -->
-            <div style="background-color: ${color}; color: white; border-radius: 6px 6px 0 0;" class="px-3 py-2">
-                <strong>AE ${escapeHtml(s.ae_nummer)}</strong> &nbsp;&nbsp;
-                <span>Vorgang ${s.vorgang}</span> &nbsp;&nbsp;
-                <span>Mappe ${s.fach}</span>
-            </div>
-
-            <!-- Info-Zeile -->
-            <div class="px-3 py-2">
-                <div class="small">
-                    <strong>Firma:</strong> ${escapeHtml(s.firma) || '-'} &nbsp;&nbsp;
-                    <strong>Ort:</strong> ${escapeHtml(s.ort) || '-'} &nbsp;&nbsp;
-                    <strong>Mitarbeiter:</strong> ${s.personen} &nbsp;&nbsp;
-                    <strong>Telefon:</strong> ${escapeHtml(s.telefonnummer) || '-'}
-                </div>
-                ${s.bemerkung ? `<div class="mt-1 text-danger small"><strong>Bemerkung:</strong> ${escapeHtml(s.bemerkung)}</div>` : ''}
-            </div>
-
-            <!-- Buttons -->
-            <div class="px-3 pb-2 d-flex justify-content-end gap-2">
-                ${isActive
-                    ? `<button data-action="status" data-newstatus="zurueckgegeben" class="btn btn-sm btn-outline-warning">
-                        <span class="btn-icon" style="--icon: url(/static/pause.svg)" aria-hidden="true"></span> Unterbrechung
-                       </button>`
-                    : `<button data-action="status" data-newstatus="in arbeit" class="btn btn-sm btn-outline-success">
-                        <span class="btn-icon" style="--icon: url(/static/helm.svg)" aria-hidden="true"></span> In Arbeit
-                       </button>`
-                }
-                <button data-action="edit" class="btn btn-sm btn-outline-primary">
-                    <span class="btn-icon" style="--icon: url(/static/stift.svg)" aria-hidden="true"></span> Bearbeiten
-                </button>
-                <button data-action="delete" class="btn btn-sm btn-outline-danger">
-                    <span class="btn-icon" style="--icon: url(/static/muell.svg)" aria-hidden="true"></span> Löschen
-                </button>
-            </div>
-        </div>`;
+        return group.length === 1 ? renderEinzelKarte(group[0], color) : renderGruppenKarte(group, color);
     }).join('');
 
     container.innerHTML = html;
