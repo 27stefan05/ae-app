@@ -514,3 +514,63 @@ def test_generate_pdf_ignores_missing_backup_dir(client, tmp_path, monkeypatch):
     finally:
         if os.path.exists(path):
             os.remove(path)
+
+
+def test_weiterer_vorgang_kommt_in_dieselbe_mappe(client):
+    create_schein(client, '7001')              # Mappe 1
+    create_schein(client, '7002')              # Mappe 2
+    # Formular schickt die freie Mappe mit, der Server nimmt trotzdem die der AE.
+    create_schein(client, '7001', vorgang='20', fach='3')
+    by_key = {(s['ae_nummer'], s['vorgang']): s['fach'] for s in client.get('/scheine').get_json()}
+    assert by_key[('7001', 10)] == 1
+    assert by_key[('7001', 20)] == 1
+    assert by_key[('7002', 10)] == 2
+
+
+def test_eingabe_schlaegt_mappe_und_vorgang_der_ae_vor(client):
+    create_schein(client, '7101')
+    create_schein(client, '7102')
+    create_schein(client, '7101', vorgang='20')
+    html = client.get('/eingabe?ae_nummer=7101').get_data(as_text=True)
+    assert 'value="1" data-free-fach="3"' in html
+    assert '<option value="30" selected>' in html
+    # Neue AE: freie Mappe, Vorgang 10
+    html = client.get('/eingabe?ae_nummer=7199').get_data(as_text=True)
+    assert 'value="3" data-free-fach="3"' in html
+    assert '<option value="10" selected>' in html
+
+
+def test_weiterer_vorgang_geht_auch_wenn_mappen_voll(client):
+    with app_module.app.app_context():
+        app_module.db.session.add(app_module.Setting(key='max_mappen', value='1'))
+        app_module.db.session.commit()
+    create_schein(client, '7201')
+    resp = create_schein(client, '7201', vorgang='20')
+    assert resp.status_code == 302
+    assert len(client.get('/scheine').get_json()) == 2
+
+
+def test_restore_kommt_zurueck_in_mappe_der_ae(client):
+    create_schein(client, '7301')
+    create_schein(client, '7301', vorgang='20')
+    schein = [s for s in client.get('/scheine').get_json() if s['vorgang'] == 20][0]
+    client.delete(f"/delete/{schein['id']}")
+    assert client.post(f"/restore/{schein['id']}").status_code == 200
+    assert all(s['fach'] == 1 for s in client.get('/scheine').get_json())
+
+
+def test_mappe_bleibt_belegt_solange_ein_vorgang_da_ist(client):
+    create_schein(client, '7401')                  # Vorgang 10, Mappe 1
+    create_schein(client, '7401', vorgang='20')    # Vorgang 20, Mappe 1
+    vorgang_10 = [s for s in client.get('/scheine').get_json() if s['vorgang'] == 10][0]
+    client.delete(f"/delete/{vorgang_10['id']}")
+
+    # Mappe 1 ist nicht frei: eine neue AE bekommt Mappe 2 ...
+    create_schein(client, '7402')
+    by_key = {(s['ae_nummer'], s['vorgang']): s['fach'] for s in client.get('/scheine').get_json()}
+    assert by_key == {('7401', 20): 1, ('7402', 10): 2}
+
+    # ... und ein neuer Vorgang von 7401 kommt wieder in Mappe 1.
+    create_schein(client, '7401', vorgang='30')
+    fach = [s['fach'] for s in client.get('/scheine').get_json() if s['vorgang'] == 30][0]
+    assert fach == 1

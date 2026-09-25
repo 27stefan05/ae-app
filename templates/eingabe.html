@@ -17,8 +17,9 @@
             <!-- AE-Nummer -->
             <div class="col-md-6">
                 <label class="form-label">AE-Nummer</label>
-                <input type="text" name="ae_nummer" class="form-control form-control-lg" 
+                <input type="text" name="ae_nummer" id="aeNummerInput" class="form-control form-control-lg" 
                        value="{{ values.ae_nummer }}" maxlength="8" required>
+                <div id="aeHint" class="form-text text-warning-emphasis d-none"></div>
             </div>
 
             <!-- Vorgang -->
@@ -37,8 +38,8 @@
             <!-- Mappe -->
             <div class="col-md-3">
                 <label class="form-label">Mappe</label>
-                <input type="number" name="fach" class="form-control form-control-lg" 
-                       value="{{ next_fach or '' }}" readonly>
+                <input type="number" name="fach" id="fachInput" class="form-control form-control-lg" 
+                       value="{{ next_fach or '' }}" data-free-fach="{{ free_fach or '' }}" readonly>
             </div>
 
             <!-- Firma -->
@@ -215,6 +216,61 @@ function syncVorgangField() {
     }
 }
 vorgangSelect.addEventListener('change', syncVorgangField);
+
+// Gleiche AE-Nummer kommt in dieselbe Mappe. Beim Tippen Mappe, Hinweis und
+// Vorgang anpassen. Der Server entscheidet beim Speichern trotzdem selbst.
+const aeInput = document.getElementById('aeNummerInput');
+const fachInput = document.getElementById('fachInput');
+const aeHint = document.getElementById('aeHint');
+let scheineByAe = {};
+
+function selectVorgang(value) {
+    const text = String(value);
+    if ([...vorgangSelect.options].some(o => o.value === text)) {
+        vorgangSelect.value = text;
+    } else {
+        vorgangSelect.value = '__custom__';
+        vorgangCustom.value = text;
+    }
+    syncVorgangField();
+}
+
+function currentVorgang() {
+    return vorgangSelect.value === '__custom__' ? vorgangCustom.value : vorgangSelect.value;
+}
+
+function updateForAe(adjustVorgang) {
+    const info = scheineByAe[aeInput.value.trim()];
+    if (!info) {
+        fachInput.value = fachInput.dataset.freeFach;
+        aeHint.classList.add('d-none');
+        return;
+    }
+    fachInput.value = info.fach;
+    const vorgaenge = [...info.vorgaenge].sort((a, b) => a - b);
+    aeHint.textContent = `AE existiert bereits in Mappe ${info.fach} (Vorgang ${vorgaenge.join(', ')}). ` +
+        'Ein weiterer Vorgang kommt in dieselbe Mappe.';
+    aeHint.classList.remove('d-none');
+    if (adjustVorgang && info.vorgaenge.has(Number(currentVorgang()))) {
+        let next = 10;
+        while (info.vorgaenge.has(next)) next += 10;
+        selectVorgang(next);
+    }
+}
+
+aeInput.addEventListener('input', function() { updateForAe(true); });
+
+fetch('/scheine')
+    .then(res => res.json())
+    .then(data => {
+        scheineByAe = {};
+        data.forEach(s => {
+            const entry = scheineByAe[s.ae_nummer] || (scheineByAe[s.ae_nummer] = { fach: s.fach, vorgaenge: new Set() });
+            entry.vorgaenge.add(s.vorgang);
+        });
+        updateForAe(false);
+    })
+    .catch(() => {});
 
 document.addEventListener('DOMContentLoaded', function() {
     const preset = {{ values.vorgang|tojson }};
