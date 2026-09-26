@@ -432,6 +432,22 @@
         {% block content %}{% endblock %}
     </div>
 
+    <!-- Meldungsfenster statt alert() des Browsers -->
+    <div class="modal" id="aeMessageModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="aeMessageTitle">Hinweis</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen"></button>
+                </div>
+                <div class="modal-body fs-5" id="aeMessageText"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary btn-lg px-5" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Hinweis nach dem Löschen, mit Rückgängig -->
     <div class="toast-container position-fixed bottom-0 start-50 translate-middle-x p-3">
         <div id="undoToast" class="toast text-bg-dark border-0" role="status" aria-live="polite" data-bs-autohide="false" style="width: auto; max-width: 90vw;">
@@ -444,6 +460,22 @@
 
     <script src="/static/bootstrap.bundle.min.js"></script>
     <script>
+    // Meldung im App-Stil statt alert(). Ein offenes Fenster wird vorher
+    // geschlossen, damit nicht zwei Fenster übereinander liegen.
+    window.aeMessage = function (text, title) {
+        var el = document.getElementById('aeMessageModal');
+        document.getElementById('aeMessageTitle').textContent = title || 'Hinweis';
+        document.getElementById('aeMessageText').textContent = text;
+        var open = document.querySelector('.modal.show');
+        var show = function () { bootstrap.Modal.getOrCreateInstance(el).show(); };
+        if (open && open !== el) {
+            open.addEventListener('hidden.bs.modal', show, { once: true });
+            bootstrap.Modal.getOrCreateInstance(open).hide();
+        } else {
+            show();
+        }
+    };
+
     // Nach dem Löschen 10 Sekunden lang "Rückgängig" anbieten.
     // Der Server hält gelöschte Scheine dafür kurz vor (/restore/<id>).
     window.aeOfferUndo = (function () {
@@ -467,14 +499,14 @@
                     .then(function (result) {
                         toast.hide();
                         if (!result.ok) {
-                            alert(result.data.error || 'Wiederherstellen fehlgeschlagen.');
+                            window.aeMessage(result.data.error || 'Wiederherstellen fehlgeschlagen.', 'Rückgängig nicht möglich');
                             return;
                         }
                         if (onRestored) onRestored();
                     })
                     .catch(function () {
                         toast.hide();
-                        alert('Wiederherstellen fehlgeschlagen.');
+                        window.aeMessage('Wiederherstellen fehlgeschlagen.', 'Rückgängig nicht möglich');
                     });
             };
             if (timer) clearTimeout(timer);
