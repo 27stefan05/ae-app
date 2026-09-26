@@ -312,11 +312,24 @@ function filterListe() {
 function handleAeNummerKeydown(event) {
     if (event.key !== 'Enter') return;
     if (document.querySelector('.modal.show')) return;
+    // stopPropagation verhindert, dass dasselbe Enter-Event sofort auch den
+    // globalen Bestaetigen-Handler in base.html ausloest und das gerade erst
+    // geoeffnete Modal ungewollt sofort wieder bestaetigt.
+
+    // Scanner-Shortcut: AE-Nummer mit genau einem Vorgang -> gleich das
+    // Status-Fenster. Scannen, Enter, Enter, fertig. Bei mehreren Vorgaengen
+    // entscheidet man per Antippen in der Liste.
+    const ae = document.getElementById('ae_nummer').value.trim();
+    const exakt = allScheine.filter(s => String(s.ae_nummer) === ae);
+    if (ae && exakt.length === 1) {
+        const s = exakt[0];
+        event.stopPropagation();
+        showStatusModal(s.id, isActive(s) ? 'zurueckgegeben' : 'in arbeit', s.ae_nummer, s.vorgang, s.fach);
+        return;
+    }
+
     const hasResults = document.querySelector('#scheineListe [data-id]') !== null;
     if (!hasResults) {
-        // Verhindert, dass dasselbe Enter-Event sofort auch den globalen
-        // Bestaetigen-Handler in base.html ausloest und das gerade erst
-        // geoeffnete Modal ungewollt sofort wieder bestaetigt.
         event.stopPropagation();
         showAusgebenModal();
     }
