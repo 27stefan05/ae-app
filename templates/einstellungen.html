@@ -175,6 +175,48 @@
 
 </div>
 
+<!-- Ort/Firma umbenennen -->
+<div class="modal" id="entryEditModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="entryEditTitle">Umbenennen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label" for="entryEditName">Neuer Name</label>
+                <input type="text" id="entryEditName" class="form-control form-control-lg" autocomplete="off">
+                <div id="entryEditError" class="text-danger mt-2"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-lg" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-primary btn-lg" onclick="saveEntryEdit()">Speichern</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ort/Firma löschen -->
+<div class="modal" id="entryDeleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="entryDeleteTitle">Löschen?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen"></button>
+            </div>
+            <div class="modal-body text-center">
+                <p class="fs-4 fw-bold mb-2" id="entryDeleteName"></p>
+                <p class="text-body-secondary mb-0">Wird aus der Auswahlliste entfernt. Vorhandene Scheine behalten den Namen.</p>
+                <div id="entryDeleteError" class="text-danger mt-2"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-lg" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-danger btn-lg" onclick="confirmEntryDelete()">Löschen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 function buildEntryListItem(id, name, kind) {
     const li = document.createElement('li');
@@ -203,101 +245,119 @@ function buildEntryListItem(id, name, kind) {
     return li;
 }
 
-document.getElementById('orte-liste').addEventListener('click', function(e) {
-    const li = e.target.closest('li[data-id]');
-    if (!li) return;
-    if (e.target.classList.contains('edit-ort-btn')) editOrt(li.dataset.id, li.dataset.name);
-    if (e.target.classList.contains('delete-ort-btn')) deleteOrt(li.dataset.id);
+const ENTRY_KINDS = {
+    ort:   { list: 'orte-liste',   url: '/ort',   label: 'Ort',   input: 'new_ort' },
+    firma: { list: 'firmen-liste', url: '/firma', label: 'Firma', input: 'new_firma' }
+};
+
+['ort', 'firma'].forEach(function(kind) {
+    document.getElementById(ENTRY_KINDS[kind].list).addEventListener('click', function(e) {
+        const li = e.target.closest('li[data-id]');
+        if (!li) return;
+        if (e.target.closest(`.edit-${kind}-btn`)) showEntryEdit(kind, li);
+        if (e.target.closest(`.delete-${kind}-btn`)) showEntryDelete(kind, li);
+    });
 });
 
-document.getElementById('firmen-liste').addEventListener('click', function(e) {
-    const li = e.target.closest('li[data-id]');
-    if (!li) return;
-    if (e.target.classList.contains('edit-firma-btn')) editFirma(li.dataset.id, li.dataset.name);
-    if (e.target.classList.contains('delete-firma-btn')) deleteFirma(li.dataset.id);
-});
+// Antwort auswerten: 401 = Sitzung abgelaufen -> zum Login, sonst Fehlertext.
+function entryRequest(url, options) {
+    return fetch(url, options).then(res => {
+        if (res.status === 401) {
+            location.href = '/login?timeout=1';
+            return new Promise(() => {});
+        }
+        return res.json().catch(() => ({})).then(data => {
+            if (!res.ok || data.error) throw new Error(data.error || 'Das hat nicht geklappt.');
+            return data;
+        });
+    });
+}
 
-function addOrt(e) {
+function addEntry(kind, e) {
     e.preventDefault();
-    const input = document.getElementById('new_ort');
+    const cfg = ENTRY_KINDS[kind];
+    const input = document.getElementById(cfg.input);
     const value = input.value.trim();
     if (!value) return;
-    fetch('/ort', {
+    entryRequest(cfg.url, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({name: value})
     })
-    .then(res => res.json())
     .then(data => {
-        if (data.error) { alert(data.error); return; }
-        document.getElementById('orte-liste').appendChild(buildEntryListItem(data.id, data.name, 'ort'));
+        // Gibt es den Namen schon, liefert der Server den vorhandenen Eintrag.
+        const list = document.getElementById(cfg.list);
+        if (!list.querySelector(`li[data-id="${data.id}"]`)) {
+            list.appendChild(buildEntryListItem(data.id, data.name, kind));
+        }
         input.value = '';
     })
-    .catch(() => alert('Ort konnte nicht gespeichert werden.'));
+    .catch(err => window.aeMessage(err.message, `${cfg.label} nicht gespeichert`));
 }
 
-function addFirma(e) {
-    e.preventDefault();
-    const input = document.getElementById('new_firma');
-    const value = input.value.trim();
-    if (!value) return;
-    fetch('/firma', {
-        method: 'POST',
+function addOrt(e) { addEntry('ort', e); }
+function addFirma(e) { addEntry('firma', e); }
+
+let entryTarget = null;
+
+function showEntryEdit(kind, li) {
+    const cfg = ENTRY_KINDS[kind];
+    entryTarget = { kind: kind, li: li };
+    document.getElementById('entryEditTitle').textContent = `${cfg.label} umbenennen`;
+    const input = document.getElementById('entryEditName');
+    input.value = li.dataset.name;
+    document.getElementById('entryEditError').textContent = '';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('entryEditModal')).show();
+}
+
+function saveEntryEdit() {
+    const cfg = ENTRY_KINDS[entryTarget.kind];
+    const li = entryTarget.li;
+    const errorEl = document.getElementById('entryEditError');
+    const newName = document.getElementById('entryEditName').value.trim();
+    if (!newName) { errorEl.textContent = 'Bitte einen Namen eingeben.'; return; }
+    if (newName === li.dataset.name) {
+        bootstrap.Modal.getInstance(document.getElementById('entryEditModal')).hide();
+        return;
+    }
+    entryRequest(`${cfg.url}/${li.dataset.id}`, {
+        method: 'PUT',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name: value})
+        body: JSON.stringify({name: newName})
     })
-    .then(res => res.json())
-    .then(data => {
-        if (data.error) { alert(data.error); return; }
-        document.getElementById('firmen-liste').appendChild(buildEntryListItem(data.id, data.name, 'firma'));
-        input.value = '';
+    .then(() => {
+        li.dataset.name = newName;
+        li.querySelector('span').textContent = newName;
+        bootstrap.Modal.getInstance(document.getElementById('entryEditModal')).hide();
     })
-    .catch(() => alert('Firma konnte nicht gespeichert werden.'));
+    .catch(err => { errorEl.textContent = err.message; });
 }
 
-// Bei Fehlern (z.B. Name existiert schon) Meldung zeigen statt still neu zu laden.
-// 401 heisst abgelaufene Sitzung, dann fuehrt das Neuladen zum Login.
-function reloadAfter(request, fallbackMessage) {
-    request
-        .then(res => {
-            if (res.ok || res.status === 401) {
-                location.reload();
-                return;
-            }
-            return res.json()
-                .catch(() => ({}))
-                .then(data => alert(data.error || fallbackMessage));
+function showEntryDelete(kind, li) {
+    const cfg = ENTRY_KINDS[kind];
+    entryTarget = { kind: kind, li: li };
+    document.getElementById('entryDeleteTitle').textContent = `${cfg.label} löschen?`;
+    document.getElementById('entryDeleteName').textContent = li.dataset.name;
+    document.getElementById('entryDeleteError').textContent = '';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('entryDeleteModal')).show();
+}
+
+function confirmEntryDelete() {
+    const cfg = ENTRY_KINDS[entryTarget.kind];
+    const li = entryTarget.li;
+    entryRequest(`${cfg.url}/${li.dataset.id}`, { method: 'DELETE' })
+        .then(() => {
+            li.remove();
+            bootstrap.Modal.getInstance(document.getElementById('entryDeleteModal')).hide();
         })
-        .catch(() => alert(fallbackMessage));
+        .catch(err => { document.getElementById('entryDeleteError').textContent = err.message; });
 }
 
-function editOrt(id, currentName) {
-    const newName = prompt('Neuen Namen eingeben:', currentName);
-    if (!newName || newName === currentName) return;
-    reloadAfter(
-        fetch(`/ort/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: newName}) }),
-        'Ort konnte nicht umbenannt werden.'
-    );
-}
-
-function editFirma(id, currentName) {
-    const newName = prompt('Neuen Namen eingeben:', currentName);
-    if (!newName || newName === currentName) return;
-    reloadAfter(
-        fetch(`/firma/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: newName}) }),
-        'Firma konnte nicht umbenannt werden.'
-    );
-}
-
-function deleteOrt(id) {
-    if (!confirm('Ort wirklich löschen?')) return;
-    reloadAfter(fetch(`/ort/${id}`, { method: 'DELETE' }), 'Ort konnte nicht gelöscht werden.');
-}
-
-function deleteFirma(id) {
-    if (!confirm('Firma wirklich löschen?')) return;
-    reloadAfter(fetch(`/firma/${id}`, { method: 'DELETE' }), 'Firma konnte nicht gelöscht werden.');
-}
+document.getElementById('entryEditModal').addEventListener('shown.bs.modal', function() {
+    const input = document.getElementById('entryEditName');
+    input.focus();
+    input.select();
+});
 
 document.getElementById('generatePdfBtn').addEventListener('click', function() {
     const btn = this;
@@ -312,7 +372,7 @@ document.getElementById('generatePdfBtn').addEventListener('click', function() {
             link.href = `/static/${data.filename}`;
             document.getElementById('pdfLink').style.display = 'block';
         })
-        .catch(() => alert('Fehler beim Erzeugen der PDF!'))
+        .catch(() => window.aeMessage('Die PDF konnte nicht erzeugt werden.', 'Fehler'))
         .finally(() => {
             btn.disabled = false;
         });

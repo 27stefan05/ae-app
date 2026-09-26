@@ -371,7 +371,7 @@ function showStatusModal(id, newStatus, aeNummer, vorgang, fach) {
             loadAllScheine();
             document.getElementById('ae_nummer').value = '';
         }).catch(err => {
-            alert(err.message);
+            window.aeMessage(err.message, 'Fehler');
         }).finally(() => {
             btn.disabled = false;
         });
@@ -405,7 +405,7 @@ function showDeleteModal(id, aeNummer, vorgang) {
                 document.getElementById('ae_nummer').value = '';
                 window.aeOfferUndo(id, `AE ${aeNummer} (Vorgang ${vorgang}) gelöscht`, loadAllScheine);
             })
-            .catch(err => alert('Fehler beim Löschen: ' + err.message));
+            .catch(err => window.aeMessage('Der Schein konnte nicht gelöscht werden.', 'Fehler'));
     };
 }
 

@@ -242,7 +242,7 @@ document.getElementById('scheineListe').addEventListener('click', function(e) {
                     loadAllScheine();
                     window.aeOfferUndo(id, `AE ${schein.ae_nummer} (Vorgang ${schein.vorgang}) gelöscht`, loadAllScheine);
                 })
-                .catch(() => alert('Fehler beim Löschen!'));
+                .catch(() => window.aeMessage('Der Schein konnte nicht gelöscht werden.', 'Fehler'));
         };
     }
 });
@@ -287,7 +287,7 @@ document.getElementById('generatePdfBtn').addEventListener('click', function() {
             }, 2500);
         })
         .catch(() => {
-            alert('Fehler beim Erzeugen der PDF!');
+            window.aeMessage('Die PDF konnte nicht erzeugt werden.', 'Fehler');
             btn.innerHTML = originalText;
             btn.disabled = false;
         });
