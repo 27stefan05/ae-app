@@ -117,27 +117,10 @@ def mappen_voll_meldung():
     return (f"Alle {get_max_mappen()} Mappen sind belegt. Bitte erst einen fertigen Schein "
             "löschen oder die maximale Anzahl Mappen in den Einstellungen erhöhen.")
 
-# Standort des Kiosks. Ohne eigene Koordinaten in den Einstellungen
-# schaltet der Dark Mode nach Sonnenaufgang und Sonnenuntergang hier.
-DEFAULT_THEME_LAT = 48.76071585556061
-DEFAULT_THEME_LON = 11.502540053417018
-
-
-def get_theme_coords():
-    def read(key):
-        row = Setting.query.filter_by(key=key).first()
-        if not row or not (row.value or '').strip():
-            return None
-        try:
-            return float(row.value)
-        except ValueError:
-            return None
-
-    lat = read('theme_lat')
-    lon = read('theme_lon')
-    if lat is None or lon is None:
-        return DEFAULT_THEME_LAT, DEFAULT_THEME_LON
-    return lat, lon
+# Standort des Kiosks. Der Dark Mode schaltet nach Sonnenaufgang und
+# Sonnenuntergang an diesem Ort. Fest eingestellt, der Kiosk zieht nicht um.
+THEME_LAT = 48.76071585556061
+THEME_LON = 11.502540053417018
 
 
 def upsert_setting(key, value):
@@ -148,26 +131,9 @@ def upsert_setting(key, value):
         db.session.add(Setting(key=key, value=value))
 
 
-def parse_coord(value, low, high, label):
-    text = (value or '').strip().replace(',', '.')
-    if text == '':
-        return ''
-    try:
-        number = float(text)
-    except ValueError:
-        raise ValueError(f"{label} muss eine Zahl sein.")
-    if number < low or number > high:
-        raise ValueError(f"{label} muss zwischen {low} und {high} liegen.")
-    return str(number)
-
-
 @app.context_processor
 def inject_theme_coords():
-    try:
-        lat, lon = get_theme_coords()
-    except Exception:
-        lat, lon = None, None
-    return {'theme_lat': lat, 'theme_lon': lon}
+    return {'theme_lat': THEME_LAT, 'theme_lon': THEME_LON}
 
 
 def get_max_vorgaenge():
@@ -512,18 +478,6 @@ def einstellungen():
             try:
                 value = parse_int(data['max_vorgaenge'], 'Maximale Vorgänge', minimum=10)
                 upsert_setting('max_vorgaenge', str(value))
-                db.session.commit()
-            except ValueError as e:
-                import_error = str(e)
-
-        if 'theme_lat' in data or 'theme_lon' in data:
-            try:
-                lat = parse_coord(data.get('theme_lat'), -90, 90, 'Breitengrad')
-                lon = parse_coord(data.get('theme_lon'), -180, 180, 'Längengrad')
-                if (lat == '') != (lon == ''):
-                    raise ValueError('Breitengrad und Längengrad bitte beide eintragen oder beide leer lassen.')
-                upsert_setting('theme_lat', lat)
-                upsert_setting('theme_lon', lon)
                 db.session.commit()
             except ValueError as e:
                 import_error = str(e)
