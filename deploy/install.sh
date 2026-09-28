@@ -62,8 +62,17 @@ cp "$APP_DIR/deploy/plymouth/ae-splash.plymouth" \
    "$APP_DIR/deploy/plymouth/ae-splash.script" \
    "$APP_DIR/deploy/plymouth/logo.png" \
    "$THEME_DIR/"
-# -R schreibt das Theme in die Initramfs, sonst sieht man es beim Start nicht.
-plymouth-set-default-theme -R ae-splash
+# Ubuntu hat kein plymouth-set-default-theme, das Standard-Theme laeuft dort
+# ueber update-alternatives (default.plymouth). Danach die Initramfs neu
+# bauen, sonst sieht man das Theme beim Start nicht.
+if command -v plymouth-set-default-theme >/dev/null 2>&1; then
+    plymouth-set-default-theme -R ae-splash
+else
+    update-alternatives --install /usr/share/plymouth/themes/default.plymouth \
+        default.plymouth "$THEME_DIR/ae-splash.plymouth" 100
+    update-alternatives --set default.plymouth "$THEME_DIR/ae-splash.plymouth"
+    update-initramfs -u
+fi
 
 python3 - << 'PY'
 from pathlib import Path
