@@ -7,7 +7,10 @@ Autologin + labwc (minimaler Wayland-Fenstermanager) + Chromium im Kiosk-Modus
 
 ## Ablauf
 
-1. Ubuntu Server installieren, Benutzer `kwin` anlegen.
+1. Ubuntu Server **26.04 LTS** installieren, im Installer Tastaturlayout **German**
+   waehlen und einen eigenen Admin-Benutzer anlegen. Danach `sudo adduser kwin`
+   (Kiosk-Benutzer, ohne sudo-Rechte). 24.04 geht nicht: dort fehlt squeekboard
+   und labwc ist zu alt fuer die Bildschirmtastatur.
 2. Dieses Projekt nach `/opt/ae-app` kopieren (per `git clone`, solange noch
    Internet verfuegbar ist, oder per USB-Stick).
 3. `sudo ./deploy/install.sh` ausfuehren.
@@ -22,6 +25,10 @@ Autologin + labwc (minimaler Wayland-Fenstermanager) + Chromium im Kiosk-Modus
 - Benutzer `kwin` in den Gruppen `video`, `render` und `input` (plus `seat`, falls vorhanden), `seatd` wird gestartet
 - Python-venv + Abhaengigkeiten aus `requirements-prod.txt`
 - systemd-Service `ae-app` (Gunicorn, startet automatisch, neu startet bei Absturz)
+- Bildschirmtastatur: squeekboard wird per `gsettings` eingeschaltet (deutsches Layout),
+  Chromium laeuft nativ unter Wayland mit `text-input-v3`, damit die Tastatur bei
+  jedem Textfeld aufgeht
+- Tastaturlayout Deutsch fuer eine angeschlossene Tastatur (`deploy/labwc-environment`)
 - Kiosk-Autostart: Autologin auf tty1 fuer den `kwin`-Benutzer, der beim Login
   automatisch `labwc` startet, das wiederum Squeekboard und Chromium im
   Kiosk-Modus startet (und Chromium bei einem Absturz automatisch neu startet)

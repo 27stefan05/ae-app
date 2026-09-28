@@ -1,0 +1,3 @@
+# Umgebung fuer labwc (~/.config/labwc/environment).
+# Deutsches Layout fuer eine angeschlossene Tastatur im Kiosk.
+XKB_DEFAULT_LAYOUT=de
