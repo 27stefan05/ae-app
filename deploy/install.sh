@@ -1,7 +1,5 @@
 #!/bin/bash
 # Richtet den Arbeitsschein-Kiosk auf einem frischen Ubuntu Server 26.04 LTS ein.
-# (24.04 geht nicht: dort fehlt squeekboard und labwc ist zu alt fuer die
-# Bildschirmtastatur.)
 #
 # Voraussetzungen, bevor dieses Skript laeuft:
 #   - Ubuntu Server ist installiert
@@ -13,7 +11,7 @@
 #
 # Das Skript installiert die noetigen Pakete, richtet die Python-Umgebung ein,
 # registriert die App als systemd-Service und richtet den automatischen
-# Kiosk-Start (Autologin + labwc + Chromium + Bildschirmtastatur) ein.
+# Kiosk-Start (Autologin + labwc + Chromium) ein.
 # Was danach noch manuell zu tun bleibt, steht am Ende der Ausgabe.
 
 set -euo pipefail
@@ -43,12 +41,9 @@ chown -R "$KIOSK_USER:$KIOSK_USER" "$APP_DIR"
 
 echo "==> Installiere System-Pakete..."
 apt update
-# squeekboard gibt es erst ab Ubuntu 25.10 (24.04 hat es nicht).
-# libglib2.0-bin (gsettings), dbus-user-session und gsettings-desktop-schemas
-# braucht squeekboard, um eingeschaltet zu werden (siehe labwc-autostart).
+# Die Bildschirmtastatur bringt die App selbst mit (static/osk.js).
 apt install -y python3 python3-venv python3-pip \
-    labwc seatd wlr-randr swaybg curl plymouth chromium-browser squeekboard \
-    libglib2.0-bin dbus-user-session gsettings-desktop-schemas
+    labwc seatd wlr-randr swaybg curl plymouth chromium-browser
 
 echo "==> Gruppen und seatd fuer den Kiosk-Benutzer..."
 # video/render: Bildschirm und GPU, input: Touch und Tastatur.
@@ -155,7 +150,7 @@ systemctl daemon-reload
 systemctl enable ae-app
 systemctl restart ae-app
 
-echo "==> Kiosk-Autostart (labwc + Chromium + Bildschirmtastatur) einrichten..."
+echo "==> Kiosk-Autostart (labwc + Chromium) einrichten..."
 sudo -u "$KIOSK_USER" mkdir -p "/home/$KIOSK_USER/.config/labwc"
 sudo -u "$KIOSK_USER" cp "$APP_DIR/deploy/labwc-autostart" "/home/$KIOSK_USER/.config/labwc/autostart"
 # Tastaturlayout im Kiosk (labwc liest es aus environment, nicht aus der Konsole).

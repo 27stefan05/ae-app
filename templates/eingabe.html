@@ -18,7 +18,7 @@
             <!-- AE-Nummer -->
             <div class="col-md-6">
                 <label class="form-label">AE-Nummer</label>
-                <input type="text" name="ae_nummer" id="aeNummerInput" class="form-control form-control-lg" 
+                <input type="text" name="ae_nummer" id="aeNummerInput" inputmode="numeric" class="form-control form-control-lg" 
                        value="{{ values.ae_nummer }}" maxlength="8" required>
                 <div id="aeHint" class="form-text text-warning-emphasis d-none"></div>
             </div>
@@ -65,7 +65,7 @@
             <!-- Telefonnummer -->
             <div class="col-md-6">
                 <label class="form-label">Telefonnummer</label>
-                <input type="text" name="telefonnummer" class="form-control" 
+                <input type="text" name="telefonnummer" inputmode="tel" class="form-control" 
                        value="{{ values.telefonnummer }}">
             </div>
 

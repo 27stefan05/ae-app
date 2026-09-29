@@ -14,12 +14,7 @@ swaybg -c '#0078DC' -i /opt/ae-app/deploy/plymouth/logo.png -m center >/dev/null
 sleep 0.4
 plymouth quit >/dev/null 2>&1 || true
 
-# Bildschirmtastatur. squeekboard zeigt sich nur, wenn die GNOME-Einstellung
-# "Bildschirmtastatur" an ist, und nimmt das Layout aus den input-sources.
-# Sie geht auf, sobald ein Textfeld den Fokus bekommt (Finger oder Maus).
-gsettings set org.gnome.desktop.a11y.applications screen-keyboard-enabled true
-gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'de')]"
-squeekboard &
+# Die Bildschirmtastatur ist Teil der App (static/osk.js), kein eigenes Programm.
 
 while true; do
     # Fehlerseite vermeiden, solange Gunicorn noch nicht antwortet.
@@ -36,9 +31,6 @@ while true; do
         --no-first-run \
         --check-for-update-interval=31536000 \
         --disable-features=TranslateUI \
-        --ozone-platform=wayland \
-        --enable-wayland-ime \
-        --wayland-text-input-version=3 \
         http://127.0.0.1:5000/
     sleep 2
 done &
