@@ -9,8 +9,11 @@
 // - Die Tasten nehmen den Fokus nicht weg, Eingaben lösen ein normales
 //   input-Event aus (Live-Suche usw. funktionieren).
 // - Tippen auf einer echten Tastatur oder dem Scanner blendet sie aus.
+// - Umschalttaste: einmal = nächster Buchstabe groß, zweimal schnell =
+//   Feststelltaste (bleibt groß, bis man sie wieder antippt).
 (function () {
     var AUTO_MS = 1000;
+    var DOUBLE_TAP_MS = 400;
     var FULL_ROWS = [
         ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'ß', 'BACK'],
         ['q', 'w', 'e', 'r', 't', 'z', 'u', 'i', 'o', 'p', 'ü'],
@@ -27,7 +30,7 @@
     var TEL_EXTRA = ['+', '/', '-', 'SPACE'];
     var LABELS = {
         BACK: '<i class="bi bi-backspace" aria-hidden="true"></i>',
-        SHIFT: '<i class="bi bi-shift" aria-hidden="true"></i>',
+        SHIFT: '',
         SPACE: 'Leertaste',
         ENTER: '<i class="bi bi-arrow-return-left" aria-hidden="true"></i>',
         HIDE: '<i class="bi bi-chevron-down" aria-hidden="true"></i>'
@@ -42,6 +45,8 @@
 
     var target = null;
     var shift = false;
+    var capsLock = false;
+    var lastShiftTap = 0;
     var mode = null;
     var lastPointer = { el: null, time: 0 };
 
@@ -59,10 +64,18 @@
         return 'full';
     }
 
+    function shiftLabel() {
+        var icon = capsLock ? 'bi-capslock-fill' : (shift ? 'bi-shift-fill' : 'bi-shift');
+        return '<i class="bi ' + icon + '" aria-hidden="true"></i>';
+    }
+
     function keyHtml(key) {
-        var label = LABELS[key] || (shift ? key.toUpperCase().replace('SS', 'ß') : key);
-        var cls = 'osk-key' + (LABELS[key] ? ' osk-' + key.toLowerCase() : '') +
-            (key === 'SHIFT' && shift ? ' osk-active' : '');
+        var special = key in LABELS;
+        var label = key === 'SHIFT' ? shiftLabel() :
+            (LABELS[key] || (shift ? key.toUpperCase().replace('SS', 'ß') : key));
+        var cls = 'osk-key' + (special ? ' osk-' + key.toLowerCase() : '') +
+            (key === 'SHIFT' && shift ? ' osk-active' : '') +
+            (key === 'SHIFT' && capsLock ? ' osk-locked' : '');
         var aria = ARIA[key] ? ' aria-label="' + ARIA[key] + '"' : '';
         return '<button type="button" class="' + cls + '" data-key="' + key + '"' + aria + '>' + label + '</button>';
     }
@@ -83,6 +96,7 @@
         if (newMode !== mode || !panel.classList.contains('osk-open')) {
             mode = newMode;
             // Leeres Textfeld: erster Buchstabe groß (Firmen, Orte).
+            capsLock = false;
             shift = mode === 'full' && el.type !== 'password' && !el.value;
             render();
         }
@@ -146,17 +160,35 @@
         hide();
     }
 
+    function toggleShift() {
+        var now = Date.now();
+        if (capsLock) {
+            // Aus, und der nächste Tipp zählt nicht als Doppeltipp.
+            capsLock = false;
+            shift = false;
+            lastShiftTap = 0;
+            return;
+        }
+        if (now - lastShiftTap < DOUBLE_TAP_MS) {
+            capsLock = true;
+            shift = true;
+        } else {
+            shift = !shift;
+        }
+        lastShiftTap = now;
+    }
+
     function press(key) {
         if (!target) return;
         switch (key) {
             case 'BACK': backspace(target); break;
-            case 'SHIFT': shift = !shift; render(); return;
+            case 'SHIFT': toggleShift(); render(); return;
             case 'SPACE': insert(target, ' '); break;
             case 'ENTER': enter(target); return;
             case 'HIDE': hide(); return;
             default:
                 insert(target, shift && key !== 'ß' ? key.toUpperCase() : key);
-                if (shift) { shift = false; render(); }
+                if (shift && !capsLock) { shift = false; render(); }
         }
     }
 
