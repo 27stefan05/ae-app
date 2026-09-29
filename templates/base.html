@@ -379,6 +379,41 @@
         .picker-row mark { padding: 0 1px; background: #fde68a; color: inherit; border-radius: 3px; }
         [data-bs-theme="dark"] .picker-row mark { background: #6b5a12; }
 
+        /* Bildschirmtastatur der App (static/osk.js) */
+        :root {
+            --osk-bg: #d5dce5; --osk-key: #ffffff; --osk-special: #bcc6d3;
+            --osk-text: #1f2937; --osk-border: #b3bfcd;
+        }
+        [data-bs-theme="dark"] {
+            --osk-bg: #0b1016; --osk-key: #243140; --osk-special: #17212d;
+            --osk-text: #eef3f9; --osk-border: #3d4f66;
+        }
+        .osk {
+            position: fixed; left: 0; right: 0; bottom: 0; z-index: 2000;
+            padding: 10px 10px 14px;
+            background: var(--osk-bg);
+            box-shadow: 0 -6px 24px rgba(0,0,0,.28);
+            transform: translateY(100%); visibility: hidden;
+            transition: transform .15s ease, visibility 0s linear .15s;
+            user-select: none; touch-action: manipulation;
+        }
+        .osk.osk-open { transform: none; visibility: visible; transition: transform .15s ease; }
+        .osk-row { display: flex; gap: 8px; justify-content: center; margin-bottom: 8px; }
+        .osk-row:last-child { margin-bottom: 0; }
+        .osk-key {
+            flex: 1 1 0; max-width: 92px; height: 66px; padding: 0;
+            border-radius: 10px; border: 1px solid var(--osk-border);
+            background: var(--osk-key); color: var(--osk-text);
+            font-size: 1.55rem; font-weight: 500; line-height: 1;
+        }
+        .osk-back, .osk-shift, .osk-hide { background: var(--osk-special); flex-grow: 1.4; max-width: 130px; }
+        .osk-space { flex-grow: 5; max-width: none; font-size: 1.1rem; }
+        .osk-enter { flex-grow: 1.8; max-width: 170px; background: #0d6efd; border-color: #0d6efd; color: #fff; }
+        .osk-key:active, .osk-key.osk-active { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+        .osk-num .osk-row { max-width: 560px; margin-left: auto; margin-right: auto; }
+        .osk-num .osk-key { max-width: none; height: 76px; font-size: 1.9rem; }
+        .osk-num .osk-space { font-size: 1.1rem; }
+
         /* Symbol im Button übernimmt die Textfarbe (SVG als Maske). */
         .btn-icon {
             display: inline-block;
@@ -459,6 +494,7 @@
     </div>
 
     <script src="/static/bootstrap.bundle.min.js"></script>
+    <script src="/static/osk.js"></script>
     <script>
     // Meldung im App-Stil statt alert(). Ein offenes Fenster wird vorher
     // geschlossen, damit nicht zwei Fenster übereinander liegen.

@@ -2,15 +2,14 @@
 
 Diese Dateien richten die App als dauerhaft laufenden Kiosk auf einem
 Touchscreen-Rechner ein: Gunicorn als Produktions-Server (systemd-Service),
-Autologin + labwc (minimaler Wayland-Fenstermanager) + Chromium im Kiosk-Modus
-+ Squeekboard als Bildschirmtastatur.
+Autologin + labwc (minimaler Wayland-Fenstermanager) + Chromium im Kiosk-Modus.
+Die Bildschirmtastatur ist Teil der App (`static/osk.js`).
 
 ## Ablauf
 
 1. Ubuntu Server **26.04 LTS** installieren, im Installer Tastaturlayout **German**
    waehlen und einen eigenen Admin-Benutzer anlegen. Danach `sudo adduser kwin`
-   (Kiosk-Benutzer, ohne sudo-Rechte). 24.04 geht nicht: dort fehlt squeekboard
-   und labwc ist zu alt fuer die Bildschirmtastatur.
+   (Kiosk-Benutzer, ohne sudo-Rechte).
 2. Dieses Projekt nach `/opt/ae-app` kopieren (per `git clone`, solange noch
    Internet verfuegbar ist, oder per USB-Stick).
 3. `sudo ./deploy/install.sh` ausfuehren.
@@ -20,17 +19,14 @@ Autologin + labwc (minimaler Wayland-Fenstermanager) + Chromium im Kiosk-Modus
 
 ## Was das Skript automatisiert
 
-- System-Pakete (`labwc`, `seatd`, `wlr-randr`, `swaybg`, `curl`, `plymouth`, `chromium-browser`, `squeekboard`)
+- System-Pakete (`labwc`, `seatd`, `wlr-randr`, `swaybg`, `curl`, `plymouth`, `chromium-browser`)
 - Boot-Logo: Plymouth bis labwc steht, danach dasselbe Logo, bis die App auf Port 5000 antwortet
 - Benutzer `kwin` in den Gruppen `video`, `render` und `input` (plus `seat`, falls vorhanden), `seatd` wird gestartet
 - Python-venv + Abhaengigkeiten aus `requirements-prod.txt`
 - systemd-Service `ae-app` (Gunicorn, startet automatisch, neu startet bei Absturz)
-- Bildschirmtastatur: squeekboard wird per `gsettings` eingeschaltet (deutsches Layout),
-  Chromium laeuft nativ unter Wayland mit `text-input-v3`, damit die Tastatur bei
-  jedem Textfeld aufgeht
 - Tastaturlayout Deutsch fuer eine angeschlossene Tastatur (`deploy/labwc-environment`)
 - Kiosk-Autostart: Autologin auf tty1 fuer den `kwin`-Benutzer, der beim Login
-  automatisch `labwc` startet, das wiederum Squeekboard und Chromium im
+  automatisch `labwc` startet, das wiederum Chromium im
   Kiosk-Modus startet (und Chromium bei einem Absturz automatisch neu startet)
 - Bildschirm-Rotation ins Hochformat via `wlr-randr` (siehe `deploy/labwc-autostart`)
 
