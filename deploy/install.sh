@@ -40,10 +40,22 @@ fi
 chown -R "$KIOSK_USER:$KIOSK_USER" "$APP_DIR"
 
 echo "==> Installiere System-Pakete..."
-apt update
+# Ohne Netz (Update per USB-Stick) scheitert apt update; sind die Pakete schon
+# da, laeuft apt install trotzdem durch.
+apt update || echo "WARNUNG: apt update fehlgeschlagen (kein Netz?), nutze vorhandene Paketlisten."
 # Die Bildschirmtastatur bringt die App selbst mit (static/osk.js).
 apt install -y python3 python3-venv python3-pip \
     labwc seatd wlr-randr swaybg curl plymouth chromium-browser
+
+# Chromium (Snap) nicht von selbst aktualisieren lassen, solange das Geraet
+# am Netz haengt: ein Update mitten im Betrieb kann den Kiosk neu starten.
+snap refresh --hold=forever chromium >/dev/null 2>&1 || true
+
+echo "==> Zeitzone und Uhr..."
+# Ohne Netz bleibt sonst UTC: Backup (03:00) und PDF (18:00) liefen 1-2 Stunden
+# zu spaet. Hardware-Uhr in UTC, damit Sommer-/Winterzeit stimmt.
+timedatectl set-timezone Europe/Berlin
+timedatectl set-local-rtc 0
 
 echo "==> Gruppen und seatd fuer den Kiosk-Benutzer..."
 # video/render: Bildschirm und GPU, input: Touch und Tastatur.
@@ -83,6 +95,8 @@ wanted = {
     "GRUB_CMDLINE_LINUX_DEFAULT": '"quiet splash loglevel=3 systemd.show_status=false"',
     "GRUB_TIMEOUT_STYLE": "hidden",
     "GRUB_TIMEOUT": "0",
+    # Nach Stromausfall zeigt Ubuntu sonst 30 s das GRUB-Menue (recordfail).
+    "GRUB_RECORDFAIL_TIMEOUT": "0",
 }
 seen = set()
 out = []
@@ -136,13 +150,26 @@ systemctl enable getty@tty2.service
 
 echo "==> Python-Umgebung einrichten..."
 sudo -u "$KIOSK_USER" python3 -m venv "$APP_DIR/venv"
-sudo -u "$KIOSK_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip
-sudo -u "$KIOSK_USER" "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements-prod.txt"
+# Offline (Update per USB-Stick): Pakete aus einem Ordner mit Wheels, z. B.
+#   sudo WHEELS=/media/stick/ae-app-wheels bash deploy/install.sh
+# Ohne Netz und ohne WHEELS bleibt die vorhandene Umgebung und das Skript
+# laeuft weiter, statt mittendrin abzubrechen.
+if [ -n "${WHEELS:-}" ]; then
+    sudo -u "$KIOSK_USER" "$APP_DIR/venv/bin/pip" install --no-index --find-links "$WHEELS" \
+        -r "$APP_DIR/requirements-prod.txt"
+elif ! sudo -u "$KIOSK_USER" "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements-prod.txt"; then
+    echo "WARNUNG: Python-Pakete nicht installiert (kein Netz?). Vorhandene Umgebung bleibt."
+fi
 
 if [ ! -f "$APP_DIR/.env" ]; then
     echo "==> Lege .env aus Vorlage an..."
     sudo -u "$KIOSK_USER" cp "$APP_DIR/.env.example" "$APP_DIR/.env"
 fi
+
+# Passwort-Hash, Sitzungsschluessel und Datenbank nur fuer den Kiosk-Benutzer lesbar.
+chmod 600 "$APP_DIR/.env"
+sudo -u "$KIOSK_USER" mkdir -p "$APP_DIR/instance"
+chmod 700 "$APP_DIR/instance"
 
 echo "==> systemd-Service fuer die App einrichten..."
 cp "$APP_DIR/deploy/ae-app.service" /etc/systemd/system/ae-app.service
@@ -164,6 +191,9 @@ if ! grep -qF "$AUTOSTART_LINE" "$BASH_PROFILE" 2>/dev/null; then
 fi
 
 echo "==> Automatischen Login auf tty1 fuer '$KIOSK_USER' einrichten..."
+# Kiosk-Benutzer ohne Passwort-Login (der Autologin auf tty1 geht trotzdem).
+# Wartung auf tty2 nur mit dem Admin-Benutzer.
+passwd -l "$KIOSK_USER" >/dev/null
 mkdir -p /etc/systemd/system/getty@tty1.service.d
 sed "s/__KIOSK_USER__/$KIOSK_USER/" "$APP_DIR/deploy/tty1-autologin.conf" \
     > /etc/systemd/system/getty@tty1.service.d/override.conf
@@ -179,14 +209,17 @@ echo ""
 echo "  2. Falls externe Backup-SSD vorhanden: deren Pfad als BACKUP_DIR"
 echo "     in $APP_DIR/.env eintragen."
 echo ""
-echo "  3. Bildschirm-Rotation (Hochformat) und Standby-Abschaltung sind"
-echo "     hardwareabhaengig und nicht Teil dieses Skripts - siehe deploy/README.md."
+echo "  3. Uhrzeit pruefen (date). Ohne Netz stellt sie niemand nach:"
+echo "       sudo timedatectl set-time 'JJJJ-MM-TT HH:MM:SS'"
+echo ""
+echo "  Bildschirm-Standby ist eine Einstellung im Monitor-Menue."
 echo ""
 echo "  4. sudo systemctl restart ae-app"
 echo "  5. sudo reboot"
 echo ""
 echo "Wartung, wenn der Kiosk laeuft (USB-Tastatur):"
-echo "  Strg+Alt+F2  ->  Login mit dem Ubuntu-Benutzer kwin und dessen Passwort"
+echo "  Strg+Alt+F2  ->  Login mit dem Admin-Benutzer (nicht $KIOSK_USER, der hat kein sudo"
+echo "                  und keinen Passwort-Login)"
 echo "  Strg+Alt+F1  ->  zurueck zum Kiosk"
 echo "  Das Passwort der App unter /einstellungen gilt hier nicht."
 echo "  GRUB-Menue: beim Einschalten Esc (UEFI) oder linke Shift-Taste (BIOS) halten."

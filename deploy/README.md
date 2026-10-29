@@ -63,7 +63,7 @@ Autologin gilt nur fuer tty1. Eine Tastatur anschliessen:
 
 | Taste | Wirkung |
 |---|---|
-| Strg+Alt+F2 | Login-Prompt. Benutzer `kwin` und das Ubuntu-Passwort, nicht das App-Passwort |
+| Strg+Alt+F2 | Login-Prompt. Mit dem Admin-Benutzer anmelden (`kwin` hat kein sudo und keinen Passwort-Login), nicht mit dem App-Passwort |
 | Strg+Alt+F1 | zurueck zum Kiosk |
 
 Das geht auch schon, waehrend das Logo laeuft. Ohne Tastatur kommt man vom
@@ -89,3 +89,23 @@ sudo systemctl status ae-app       # laeuft der App-Server?
 sudo journalctl -u ae-app -f       # Logs der App live verfolgen
 sudo systemctl restart ae-app      # nach Aenderungen an .env neu laden
 ```
+
+## Update ohne Netz (USB-Stick)
+
+```
+cd /opt/ae-app
+sudo -u kwin git pull /media/<stick>/ae-app main
+# nur wenn sich requirements-prod.txt geaendert hat:
+sudo WHEELS=/media/<stick>/ae-app-wheels bash deploy/install.sh
+sudo systemctl restart ae-app
+```
+
+Ohne `WHEELS` und ohne Netz laeuft `install.sh` trotzdem durch und laesst die
+vorhandene Python-Umgebung stehen.
+
+## Uhrzeit
+
+Der Kiosk hat im Betrieb kein Netz und stellt die Uhr nicht selbst. Zeitzone ist
+`Europe/Berlin`. Bei jedem Update die Uhr pruefen (`date`) und bei Bedarf stellen:
+`sudo timedatectl set-time 'JJJJ-MM-TT HH:MM:SS'`. Backups und PDFs behalten immer
+die 30 neuesten Dateien, ein Sprung der Uhr loescht also nicht alles.

@@ -1,6 +1,8 @@
 [Unit]
 Description=Arbeitsschein Verwaltung (Gunicorn)
 After=network.target
+# Nie endgueltig aufgeben, der Kiosk soll ohne Eingriff wieder laufen.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -9,8 +11,13 @@ Group=kwin
 WorkingDirectory=/opt/ae-app
 # .env wird von der App selbst geladen (python-dotenv), kein EnvironmentFile noetig.
 ExecStart=/opt/ae-app/venv/bin/gunicorn --workers 1 --threads 4 --bind 127.0.0.1:5000 app:app
-Restart=on-failure
+Restart=always
 RestartSec=5
+# Neue Dateien (Datenbank, Backups, Schluessel) nur fuer den Kiosk-Benutzer.
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
 
 [Install]
 WantedBy=multi-user.target

@@ -49,3 +49,13 @@ def test_unquoted_hash_is_not_interpolated(tmp_path, monkeypatch):
     from dotenv import load_dotenv
     assert load_dotenv(env_path, override=True, interpolate=False)
     assert os.environ["ADMIN_PASSWORD_HASH"] == raw
+
+
+def test_env_datei_nur_fuer_besitzer_lesbar(tmp_path):
+    env_file = tmp_path / '.env'
+    env_file.write_text('BACKUP_DIR=/media/ssd\n')
+    os.chmod(env_file, 0o644)
+    hash_password.upsert_env_value(str(env_file), 'ADMIN_PASSWORD_HASH', 'scrypt:1$abc$def')
+    assert (os.stat(env_file).st_mode & 0o777) == 0o600
+    assert 'BACKUP_DIR=/media/ssd' in env_file.read_text()
+    assert not (tmp_path / '.env.tmp').exists()
