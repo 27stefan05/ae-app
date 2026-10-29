@@ -384,20 +384,28 @@ document.getElementById('backupNowBtn').addEventListener('click', function() {
     btn.disabled = true;
     resultEl.innerHTML = '';
 
+    // Meldungen per textContent: Fehlertexte vom Server (Pfade) nicht als HTML.
+    function line(text, cls) {
+        const span = document.createElement('span');
+        span.className = cls;
+        span.textContent = text;
+        if (resultEl.childNodes.length) resultEl.appendChild(document.createElement('br'));
+        resultEl.appendChild(span);
+    }
+
     fetch('/backup_now', { method: 'POST' })
         .then(res => res.json())
         .then(data => {
             if (data.error) {
-                resultEl.innerHTML = `<span class="text-danger">${data.error}</span>`;
+                line(data.error, 'text-danger');
                 return;
             }
-            let html = '<span class="text-success">Lokales Backup erstellt.</span>';
+            line('Lokales Backup erstellt.', 'text-success');
             if (data.external) {
-                html += '<br><span class="text-success">Auch auf externe SSD kopiert.</span>';
+                line('Auch auf externe SSD kopiert.', 'text-success');
             } else if (data.external_error) {
-                html += `<br><span class="text-warning">Externe SSD nicht gesichert: ${data.external_error}</span>`;
+                line('Externe SSD nicht gesichert: ' + data.external_error, 'text-warning');
             }
-            resultEl.innerHTML = html;
         })
         .catch(() => {
             resultEl.innerHTML = '<span class="text-danger">Backup fehlgeschlagen.</span>';

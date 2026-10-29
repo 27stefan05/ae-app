@@ -513,12 +513,12 @@
     };
 
     // Nach dem Löschen 10 Sekunden lang "Rückgängig" anbieten.
-    // Der Server hält gelöschte Scheine dafür kurz vor (/restore/<id>).
+    // Der Server hält gelöschte Scheine dafür kurz vor (/restore/<token>).
     window.aeOfferUndo = (function () {
         var UNDO_MS = 10000;
         var timer = null;
 
-        return function (id, text, onRestored) {
+        return function (token, text, onRestored) {
             var el = document.getElementById('undoToast');
             var btn = document.getElementById('undoToastBtn');
             var toast = bootstrap.Toast.getOrCreateInstance(el);
@@ -526,7 +526,7 @@
             btn.disabled = false;
             btn.onclick = function () {
                 btn.disabled = true;
-                fetch('/restore/' + id, { method: 'POST' })
+                fetch('/restore/' + encodeURIComponent(token), { method: 'POST' })
                     .then(function (res) {
                         return res.json()
                             .catch(function () { return {}; })
@@ -593,16 +593,49 @@
 
     // Enter bestaetigt das aktuell offene Bootstrap-Modal (klickt den
     // primaeren Button), damit Popups auch ohne Maus/Touch per Tastatur
-    // oder Scanner bedienbar sind.
+    // oder Scanner bedienbar sind. Ausnahmen:
+    // - Fokus auf einem Knopf oder Link (z.B. "Abbrechen"): der reagiert selbst.
+    // - Seit dem Oeffnen kamen Zeichen, die in kein Feld gingen: das war ein
+    //   Scan (Ziffern + Enter), keine Bestaetigung. Sonst wuerde ein zweiter
+    //   Scan den Status des ersten Scheins aendern.
+    var typedIntoModal = false;
+    document.addEventListener('shown.bs.modal', function () { typedIntoModal = false; });
+    document.addEventListener('keydown', function (e) {
+        if (!e.key || e.key.length !== 1 || !document.querySelector('.modal.show')) return;
+        var t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+        typedIntoModal = true;
+    }, true);
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Enter') return;
         const openModal = document.querySelector('.modal.show');
         if (!openModal) return;
+        if (e.target.closest && e.target.closest('button, a, select')) return;
+        if (typedIntoModal) {
+            typedIntoModal = false;
+            e.preventDefault();
+            return;
+        }
         const confirmBtn = openModal.querySelector('.btn-primary, .btn-danger');
         if (confirmBtn) {
             e.preventDefault();
             confirmBtn.click();
         }
+    });
+
+    // Echte Enter-Taste oder Scanner in Formularen mit mehreren Feldern
+    // (Neuer Schein, Bearbeiten) schickt nicht ab, sonst speichert ein Scan
+    // einen halben Schein. Formulare mit nur einem Feld (Login) schon.
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        var t = e.target;
+        if (!t || t.tagName !== 'INPUT' || !t.form) return;
+        var textTypes = ['text', 'number', 'tel', 'password', 'search', 'email', ''];
+        var fields = Array.prototype.filter.call(t.form.elements, function (el) {
+            if (el.disabled || el.readOnly) return false;
+            return el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && textTypes.indexOf(el.type) >= 0);
+        });
+        if (fields.length > 1) e.preventDefault();
     });
 
     // Nach 10 Minuten ohne Tippen oder Antippen zurueck auf die Startseite.
@@ -617,6 +650,7 @@
         }
 
         window.aeReturnToStart = function () {
+            if (window.aeHideKeyboard) window.aeHideKeyboard();
             var path = location.pathname;
             if (path === '/einstellungen') {
                 location.replace('/logout');

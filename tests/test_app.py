@@ -4,6 +4,8 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Kein Scheduler in den Tests: er würde sonst Backups/PDFs der echten Daten schreiben.
+os.environ.setdefault('AE_SCHEDULER', '0')
 
 import app as app_module
 
@@ -78,7 +80,7 @@ def test_create_and_list_schein(client):
 
 def test_duplicate_ae_nummer_shows_error_not_crash(client):
     create_schein(client, '11112222')
-    resp = create_schein(client, '11112222')
+    resp = create_schein(client, '11112222', bemerkung='anderer Schein')
     assert resp.status_code == 200
     assert 'existiert bereits' in resp.get_data(as_text=True)
     assert len(client.get('/scheine').get_json()) == 1
@@ -283,18 +285,21 @@ def test_backup_skips_external_gracefully_when_dir_missing(client, monkeypatch, 
 
 
 def test_cleanup_old_backups_removes_expired_files(tmp_path):
-    old_file = tmp_path / "scheine_2000-01-01_000000.db"
-    old_file.write_text("alt")
-    old_time = app_module.datetime.now() - app_module.timedelta(days=100)
-    os.utime(old_file, (old_time.timestamp(), old_time.timestamp()))
-
-    recent_file = tmp_path / "scheine_2099-01-01_000000.db"
-    recent_file.write_text("neu")
+    keep = app_module.KEEP_NEWEST_FILES
+    old_time = (app_module.datetime.now() - app_module.timedelta(days=100)).timestamp()
+    old_files = []
+    for i in range(3):
+        old_file = tmp_path / f"scheine_2000-01-0{i + 1}_000000.db"
+        old_file.write_text("alt")
+        os.utime(old_file, (old_time, old_time))
+        old_files.append(old_file)
+    for i in range(keep):
+        (tmp_path / f"scheine_2099-01-01_{i:06d}.db").write_text("neu")
 
     app_module.cleanup_old_backups(str(tmp_path))
 
-    assert not old_file.exists()
-    assert recent_file.exists()
+    assert not any(f.exists() for f in old_files)
+    assert len(list(tmp_path.iterdir())) == keep
 
 
 def test_database_under_test_is_temporary(client):
@@ -453,21 +458,22 @@ def test_eingabe_redirects_with_new_id(client):
 def test_restore_after_delete(client):
     create_schein(client, '6001', firma='Alt GmbH', bemerkung='bitte zurück')
     before = client.get('/scheine').get_json()[0]
-    client.delete(f"/delete/{before['id']}")
+    token = client.delete(f"/delete/{before['id']}").get_json()['undo']
     assert client.get('/scheine').get_json() == []
 
-    assert client.post(f"/restore/{before['id']}").status_code == 200
-    assert client.get('/scheine').get_json() == [before]
+    assert client.post(f"/restore/{token}").status_code == 200
+    after = client.get('/scheine').get_json()[0]
+    assert {k: v for k, v in after.items() if k != 'id'} == {k: v for k, v in before.items() if k != 'id'}
     # Zweimal wiederherstellen geht nicht.
-    assert client.post(f"/restore/{before['id']}").status_code == 410
+    assert client.post(f"/restore/{token}").status_code == 410
 
 
 def test_restore_fails_when_mappe_taken(client):
     create_schein(client, '6002')
     schein_id = client.get('/scheine').get_json()[0]['id']
-    client.delete(f'/delete/{schein_id}')
+    token = client.delete(f'/delete/{schein_id}').get_json()['undo']
     create_schein(client, '6003')  # bekommt dieselbe, jetzt freie Mappe
-    resp = client.post(f'/restore/{schein_id}')
+    resp = client.post(f'/restore/{token}')
     assert resp.status_code == 409
     assert 'Mappe 1' in resp.get_json()['error']
 
@@ -475,9 +481,9 @@ def test_restore_fails_when_mappe_taken(client):
 def test_restore_expires(client, monkeypatch):
     create_schein(client, '6004')
     schein_id = client.get('/scheine').get_json()[0]['id']
-    client.delete(f'/delete/{schein_id}')
+    token = client.delete(f'/delete/{schein_id}').get_json()['undo']
     monkeypatch.setattr(app_module, 'UNDO_SECONDS', -1)
-    assert client.post(f'/restore/{schein_id}').status_code == 410
+    assert client.post(f'/restore/{token}').status_code == 410
 
 
 def test_generate_pdf_copies_to_backup_dir(client, tmp_path, monkeypatch):
@@ -541,8 +547,8 @@ def test_restore_kommt_zurueck_in_mappe_der_ae(client):
     create_schein(client, '7301')
     create_schein(client, '7301', vorgang='20')
     schein = [s for s in client.get('/scheine').get_json() if s['vorgang'] == 20][0]
-    client.delete(f"/delete/{schein['id']}")
-    assert client.post(f"/restore/{schein['id']}").status_code == 200
+    token = client.delete(f"/delete/{schein['id']}").get_json()['undo']
+    assert client.post(f"/restore/{token}").status_code == 200
     assert all(s['fach'] == 1 for s in client.get('/scheine').get_json())
 
 
@@ -579,3 +585,132 @@ def test_eingabe_picker_liefert_firmen_und_uebernimmt_neue(client):
     assert (schein['firma'], schein['ort']) == ('Ganz Neu AG', 'Neue Halle')
     html = client.get('/einstellungen').get_data(as_text=True)
     assert 'Ganz Neu AG' in html and 'Neue Halle' in html
+
+
+# ----- Fehler aus der Code-Prüfung -----
+
+def test_mappe_bestimmt_der_server_nicht_das_formular(client):
+    create_schein(client, '22222222')
+    # Veraltetes Formular schickt die schon belegte Mappe 1 mit.
+    create_schein(client, '33333333', fach='1')
+    create_schein(client, '44444444', fach='99999')
+    faecher = sorted((s['ae_nummer'], s['fach']) for s in client.get('/scheine').get_json())
+    assert faecher == [('22222222', 1), ('33333333', 2), ('44444444', 3)]
+
+
+def test_doppelt_abgeschickt_zeigt_den_schein_statt_fehler(client):
+    create_schein(client, '55555555', bemerkung='x')
+    resp = create_schein(client, '55555555', bemerkung='x')
+    schein_id = client.get('/scheine').get_json()[0]['id']
+    assert resp.status_code == 302
+    assert resp.headers['Location'].endswith(f'/?neu={schein_id}')
+    assert len(client.get('/scheine').get_json()) == 1
+
+
+def test_edit_auf_vorhandenen_vorgang_zeigt_meldung(client):
+    create_schein(client, '11111111')
+    create_schein(client, '11111111', vorgang='20')
+    s20 = [s for s in client.get('/scheine').get_json() if s['vorgang'] == 20][0]
+    resp = client.post(f"/edit/{s20['id']}", data={'vorgang': '10', 'personen': '1', 'firma': 'X'})
+    assert resp.status_code == 200
+    assert 'existiert bereits' in resp.get_data(as_text=True)
+    assert sorted(s['vorgang'] for s in client.get('/scheine').get_json()) == [10, 20]
+
+
+def test_ae_nummer_nur_ziffern_leerzeichen_werden_entfernt(client):
+    assert 'nur aus Ziffern' in create_schein(client, 'AB12').get_data(as_text=True)
+    assert 'nur aus Ziffern' in create_schein(client, '123456789').get_data(as_text=True)
+    create_schein(client, ' 1234 5678 ')
+    assert client.get('/scheine').get_json()[0]['ae_nummer'] == '12345678'
+
+
+def test_zu_grosse_zahlen_und_lange_texte_geben_meldung(client):
+    body = create_schein(client, '1', vorgang='99999999999999999999').get_data(as_text=True)
+    assert 'höchstens' in body
+    body = create_schein(client, '1', personen='99999999999999999999').get_data(as_text=True)
+    assert 'höchstens' in body
+    body = create_schein(client, '1', bemerkung='x' * 501).get_data(as_text=True)
+    assert 'Bemerkung darf höchstens 500' in body
+    assert client.get('/scheine').get_json() == []
+
+
+def test_firma_und_ort_werden_getrimmt(client):
+    create_schein(client, '1', firma='  ACME ', ort=' Halle 1')
+    schein = client.get('/scheine').get_json()[0]
+    assert (schein['firma'], schein['ort']) == ('ACME', 'Halle 1')
+    with app_module.app.app_context():
+        assert [f.name for f in app_module.Firma.query.all()] == ['ACME']
+
+
+def test_kaputte_einstellung_bricht_seiten_nicht(client):
+    with app_module.app.app_context():
+        app_module.db.session.add(app_module.Setting(key='max_vorgaenge', value='abc'))
+        app_module.db.session.add(app_module.Setting(key='max_mappen', value='999999'))
+        app_module.db.session.commit()
+        assert app_module.get_max_vorgaenge() == 200
+        assert app_module.get_max_mappen() == app_module.MAX_MAPPEN_LIMIT
+    assert client.get('/eingabe').status_code == 200
+    login(client)
+    assert client.get('/einstellungen').status_code == 200
+    assert 'höchstens' in client.post('/einstellungen', data={'max_vorgaenge': '2000000'}).get_data(as_text=True)
+
+
+def test_rueckgaengig_nutzt_token_nicht_wiederverwendete_id(client):
+    create_schein(client, '7001')
+    first = client.get('/scheine').get_json()[0]
+    token = client.delete(f"/delete/{first['id']}").get_json()['undo']
+    create_schein(client, '7002')  # bekommt bei SQLite dieselbe ID
+    second = client.get('/scheine').get_json()[0]
+    client.delete(f"/delete/{second['id']}")
+    assert client.post(f'/restore/{token}').status_code == 200
+    assert [s['ae_nummer'] for s in client.get('/scheine').get_json()] == ['7001']
+
+
+def test_rueckgaengig_bleibt_nach_fehler_moeglich(client):
+    create_schein(client, '7101')
+    schein_id = client.get('/scheine').get_json()[0]['id']
+    token = client.delete(f'/delete/{schein_id}').get_json()['undo']
+    create_schein(client, '7101')  # derselbe Vorgang neu angelegt
+    assert client.post(f'/restore/{token}').status_code == 409
+    other = client.get('/scheine').get_json()[0]
+    client.delete(f"/delete/{other['id']}")
+    assert client.post(f'/restore/{token}').status_code == 200
+
+
+def test_aufraeumen_behaelt_immer_die_neuesten(tmp_path, monkeypatch):
+    # Uhr steht 10 Jahre in der Zukunft: alle Dateien wirken uralt.
+    for i in range(40):
+        (tmp_path / f'scheine_2026-01-01_{i:06d}.db').write_text('x')
+    future = app_module.datetime.now() + app_module.timedelta(days=3650)
+
+    class FakeDatetime(app_module.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return future
+    monkeypatch.setattr(app_module, 'datetime', FakeDatetime)
+    app_module.cleanup_old_backups(str(tmp_path))
+    remaining = sorted(p.name for p in tmp_path.iterdir())
+    assert len(remaining) == app_module.KEEP_NEWEST_FILES
+    assert remaining[-1] == 'scheine_2026-01-01_000039.db'
+
+
+def test_pdf_mit_sehr_langer_alter_bemerkung(client):
+    create_schein(client, '1')
+    with app_module.app.app_context():
+        schein = app_module.Arbeitsschein.query.first()
+        schein.bemerkung = 'sehr lang ' * 1000  # Altbestand, vor der Längenprüfung gespeichert
+        app_module.db.session.commit()
+    filename = app_module.generate_pdf()
+    path = os.path.join(app_module.app.static_folder, filename)
+    try:
+        assert os.path.getsize(path) > 0
+        assert not os.path.exists(path + '.tmp')
+    finally:
+        os.remove(path)
+
+
+def test_backup_wird_nachgeholt_wenn_zu_alt(client, clean_backups):
+    app_module.backup_if_overdue()
+    assert len(os.listdir(clean_backups)) == 1
+    app_module.backup_if_overdue()  # frisch: kein zweites
+    assert len(os.listdir(clean_backups)) == 1
