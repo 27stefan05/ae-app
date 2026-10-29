@@ -4,9 +4,11 @@
 # Stuerzt Chromium ab, startet die Schleife es neu.
 
 # Bildschirm ins Hochformat drehen. labwc hat dafuer keine eigene rc.xml-Option.
-# Ausgabename: ls /sys/class/drm/ && cat /sys/class/drm/*/status
-# Bei falscher Drehrichtung 90 <-> 270 tauschen.
-wlr-randr --output DP-1 --transform 270
+# Alle angeschlossenen Ausgaenge, damit ein anderer Anschluss (HDMI statt DP)
+# oder ein neuer Monitor nicht quer bleibt. Bei falscher Drehrichtung 90 <-> 270.
+for output in $(wlr-randr | awk '/^[^ ]/ {print $1}'); do
+    wlr-randr --output "$output" --transform 270
+done
 
 # Dieselbe Farbe und dasselbe Logo wie der Boot-Splash, damit dazwischen
 # kein Terminal aufblitzt. swaybg laeuft schon in der gedrehten Aufloesung.
@@ -31,6 +33,9 @@ while true; do
         --no-first-run \
         --check-for-update-interval=31536000 \
         --disable-features=TranslateUI \
+        --password-store=basic \
+        --overscroll-history-navigation=0 \
+        --disable-pinch \
         http://127.0.0.1:5000/
     sleep 2
 done &

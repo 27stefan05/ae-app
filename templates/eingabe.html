@@ -12,7 +12,7 @@
     <div class="alert alert-danger">{{ error }}</div>
     {% endif %}
 
-    <form method="POST" action="/eingabe">
+    <form method="POST" action="/eingabe" onsubmit="this.querySelector('[type=submit]').disabled = true">
         <div class="row g-3">
 
             <!-- AE-Nummer -->
@@ -65,14 +65,14 @@
             <!-- Telefonnummer -->
             <div class="col-md-6">
                 <label class="form-label">Telefonnummer</label>
-                <input type="text" name="telefonnummer" inputmode="tel" class="form-control" 
+                <input type="text" name="telefonnummer" inputmode="tel" maxlength="20" class="form-control" 
                        value="{{ values.telefonnummer }}">
             </div>
 
             <!-- Bemerkung -->
             <div class="col-12">
                 <label class="form-label">Bemerkung</label>
-                <textarea name="bemerkung" class="form-control" rows="3">{{ values.bemerkung }}</textarea>
+                <textarea name="bemerkung" class="form-control" rows="3" maxlength="500">{{ values.bemerkung }}</textarea>
             </div>
         </div>
 

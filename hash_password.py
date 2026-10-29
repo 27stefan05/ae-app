@@ -33,8 +33,14 @@ def upsert_env_value(env_path, key, value):
             lines[-1] += '\n'
         lines.append(line + '\n')
 
-    with open(env_path, 'w') as f:
+    # Erst in eine Zwischendatei (nur fuer den Besitzer lesbar), dann ersetzen:
+    # der Hash ist nie fuer andere lesbar und ein Abbruch laesst die .env heil.
+    tmp_path = env_path + '.tmp'
+    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as f:
         f.writelines(lines)
+    os.chmod(tmp_path, 0o600)
+    os.replace(tmp_path, env_path)
 
 
 def main():

@@ -122,7 +122,9 @@
     }
 
     function insert(el, text) {
-        if (el.maxLength > 0 && el.value.length >= el.maxLength) return;
+        // Volles Feld: nur noch markierten Text ersetzen.
+        var hasSelection = el.type !== 'number' && el.selectionStart !== el.selectionEnd;
+        if (el.maxLength > 0 && el.value.length >= el.maxLength && !hasSelection) return;
         // Zahlenfelder kennen keine Cursorposition: anhängen.
         if (el.type === 'number') {
             el.value = el.value + text;

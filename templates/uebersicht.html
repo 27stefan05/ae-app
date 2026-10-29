@@ -231,18 +231,23 @@ document.getElementById('scheineListe').addEventListener('click', function(e) {
         if (!schein) return;
         document.getElementById('deleteModalBody').innerHTML =
             `<p>Möchtest du <strong>AE ${escapeHtml(schein.ae_nummer)} (Vorgang ${schein.vorgang})</strong> wirklich löschen?</p>` +
-            `<p class="text-danger">Diese Aktion kann nicht rückgängig gemacht werden.</p>`;
-        const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+            `<p class="text-body-secondary">Danach 10 Sekunden lang rückgängig zu machen.</p>`;
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteModal'));
         modal.show();
         document.getElementById('confirmDelete').onclick = function() {
+            // Gegen Doppeltipp: Knopf sperren, bis die Antwort da ist.
+            const btn = this;
+            if (btn.disabled) return;
+            btn.disabled = true;
             fetch(`/delete/${id}`, { method: 'DELETE' })
-                .then(res => {
+                .then(res => res.json().catch(() => ({})).then(data => {
                     if (!res.ok) throw new Error('Löschen fehlgeschlagen');
                     modal.hide();
                     loadAllScheine();
-                    window.aeOfferUndo(id, `AE ${schein.ae_nummer} (Vorgang ${schein.vorgang}) gelöscht`, loadAllScheine);
-                })
-                .catch(() => window.aeMessage('Der Schein konnte nicht gelöscht werden.', 'Fehler'));
+                    window.aeOfferUndo(data.undo, `AE ${schein.ae_nummer} (Vorgang ${schein.vorgang}) gelöscht`, loadAllScheine);
+                }))
+                .catch(() => window.aeMessage('Der Schein konnte nicht gelöscht werden.', 'Fehler'))
+                .finally(() => { btn.disabled = false; });
         };
     }
 });

@@ -320,6 +320,8 @@ function handleAeNummerKeydown(event) {
     // Status-Fenster. Scannen, Enter, Enter, fertig. Bei mehreren Vorgaengen
     // entscheidet man per Antippen in der Liste.
     const ae = document.getElementById('ae_nummer').value.trim();
+    // Leeres Feld (z.B. verirrtes Enter vom Scanner): nichts tun.
+    if (!ae) return;
     const exakt = allScheine.filter(s => String(s.ae_nummer) === ae);
     if (ae && exakt.length === 1) {
         const s = exakt[0];
@@ -342,13 +344,15 @@ function refocusAeNummerField() {
 
 function showStatusModal(id, newStatus, aeNummer, vorgang, fach) {
     const actionText = newStatus === 'zurueckgegeben' ? 'Unterbrechung' : 'In Arbeit';
+    // Rest einer früheren, abgebrochenen Statusänderung verwerfen.
+    window.aeShowMappeAfterClose = null;
     
     document.getElementById('statusModalBody').innerHTML = `
         <p>Schein <strong>AE ${escapeHtml(aeNummer)} (Vorgang ${vorgang})</strong></p>
         <p>Status wirklich auf <strong>${actionText}</strong> setzen?</p>
     `;
     
-    const modal = new bootstrap.Modal(document.getElementById('statusModal'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('statusModal'));
     modal.show();
 
     document.getElementById('confirmStatus').onclick = function() {
@@ -360,14 +364,21 @@ function showStatusModal(id, newStatus, aeNummer, vorgang, fach) {
             body: JSON.stringify({status: newStatus})
         }).then(res => {
             if (!res.ok) throw new Error('Status konnte nicht geändert werden');
-            window.aeShowMappeAfterClose = {
+            const info = {
                 aeNummer: aeNummer,
                 vorgang: vorgang,
                 fach: fach,
                 // In Arbeit: Schein wird aus der Mappe geholt. Unterbrechung: kommt zurück hinein.
                 text: newStatus === 'in arbeit' ? 'Der Schein ist in' : 'Der Schein gehört in'
             };
-            modal.hide();
+            // Wurde das Fenster schon geschlossen, während die Anfrage lief,
+            // die Mappe direkt zeigen statt sie für später liegen zu lassen.
+            if (document.getElementById('statusModal').classList.contains('show')) {
+                window.aeShowMappeAfterClose = info;
+                modal.hide();
+            } else {
+                showMappeModal(info);
+            }
             loadAllScheine();
             document.getElementById('ae_nummer').value = '';
         }).catch(err => {
@@ -385,27 +396,32 @@ function showMappeModal(info) {
         <div class="fs-4">Mappe</div>
         <div class="mappe-number">${escapeHtml(info.fach)}</div>
     `;
-    new bootstrap.Modal(document.getElementById('mappeModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('mappeModal')).show();
 }
 
 function showDeleteModal(id, aeNummer, vorgang) {
     document.getElementById('deleteModalBody').innerHTML = `
         <p>Möchten Sie den Schein <strong>AE ${escapeHtml(aeNummer)} (Vorgang ${vorgang})</strong> wirklich löschen?</p>
-        <p class="text-danger">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+        <p class="text-body-secondary">Danach 10 Sekunden lang rückgängig zu machen.</p>
     `;
-    const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteModal'));
     modal.show();
 
     document.getElementById('confirmDelete').onclick = function() {
+        // Gegen Doppeltipp: Knopf sperren, bis die Antwort da ist.
+        const btn = this;
+        if (btn.disabled) return;
+        btn.disabled = true;
         fetch(`/delete/${id}`, { method: 'DELETE' })
-            .then(res => {
+            .then(res => res.json().catch(() => ({})).then(data => {
                 if (!res.ok) throw new Error('Löschen fehlgeschlagen');
                 modal.hide();
                 loadAllScheine();
                 document.getElementById('ae_nummer').value = '';
-                window.aeOfferUndo(id, `AE ${aeNummer} (Vorgang ${vorgang}) gelöscht`, loadAllScheine);
-            })
-            .catch(err => window.aeMessage('Der Schein konnte nicht gelöscht werden.', 'Fehler'));
+                window.aeOfferUndo(data.undo, `AE ${aeNummer} (Vorgang ${vorgang}) gelöscht`, loadAllScheine);
+            }))
+            .catch(err => window.aeMessage('Der Schein konnte nicht gelöscht werden.', 'Fehler'))
+            .finally(() => { btn.disabled = false; });
     };
 }
 
@@ -449,7 +465,7 @@ function showAusgebenModal() {
         confirmBtn.textContent = 'Anlegen';
     }
 
-    const modal = new bootstrap.Modal(document.getElementById('ausgebenModal'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('ausgebenModal'));
     modal.show();
 
     document.getElementById('confirmAusgeben').onclick = function() {

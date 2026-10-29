@@ -6,7 +6,9 @@ from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timezone, timedelta
 import os
+import re
 import atexit
+import threading
 import secrets
 import sqlite3
 import shutil
@@ -82,9 +84,32 @@ class Setting(db.Model):
     value = db.Column(db.String(50))
 
 # ===================== HILFSFUNKTIONEN =====================
+# Grenzen für Eingaben. SQLite prüft Längen nicht selbst, und zu große Zahlen
+# oder Texte führen sonst zu Serverfehlern oder sprengen das Tages-PDF.
+MAX_MAPPEN_LIMIT = 2000
+MAX_VORGAENGE_LIMIT = 990
+MAX_VORGANG = 9990
+MAX_PERSONEN = 999
+MAX_LEN = {'firma': 100, 'ort': 100, 'telefonnummer': 20, 'bemerkung': 500}
+AE_PATTERN = re.compile(r'^\d{1,8}$')
+
+# Anlegen, Löschen und Wiederherstellen laufen nacheinander, damit zwei
+# gleichzeitige Anfragen nicht dieselbe freie Mappe bekommen (1 Gunicorn-Worker).
+schein_lock = threading.Lock()
+
+
+def get_int_setting(key, default, low, high):
+    """Zahl aus den Einstellungen; bei kaputtem Wert der Standard, sonst begrenzt."""
+    setting = Setting.query.filter_by(key=key).first()
+    try:
+        value = int(setting.value) if setting else default
+    except (TypeError, ValueError):
+        value = default
+    return min(max(value, low), high)
+
+
 def get_max_mappen():
-    setting = Setting.query.filter_by(key='max_mappen').first()
-    return int(setting.value) if setting else 300
+    return get_int_setting('max_mappen', 300, 1, MAX_MAPPEN_LIMIT)
 
 def get_next_fach():
     """Kleinste freie Mappe oder None, wenn alle belegt sind.
@@ -137,20 +162,41 @@ def inject_theme_coords():
 
 
 def get_max_vorgaenge():
-    setting = Setting.query.filter_by(key='max_vorgaenge').first()
-    return int(setting.value) if setting else 200
+    return get_int_setting('max_vorgaenge', 200, 10, MAX_VORGAENGE_LIMIT)
 
 def get_vorgang_options(max_vorgaenge):
     return list(range(10, max_vorgaenge + 10, 10))
 
-def parse_int(value, field_name, minimum=None):
+def parse_int(value, field_name, minimum=None, maximum=None):
     try:
         result = int(value)
     except (TypeError, ValueError):
         raise ValueError(f"{field_name} muss eine Zahl sein.")
     if minimum is not None and result < minimum:
         raise ValueError(f"{field_name} muss mindestens {minimum} sein.")
+    if maximum is not None and result > maximum:
+        raise ValueError(f"{field_name} darf höchstens {maximum} sein.")
     return result
+
+
+def normalize_ae(value):
+    """AE-Nummer ohne Leerzeichen; erlaubt sind 1 bis 8 Ziffern."""
+    ae = re.sub(r'\s+', '', value or '')
+    if ae and not AE_PATTERN.match(ae):
+        raise ValueError("Die AE-Nummer darf nur aus Ziffern bestehen (höchstens 8).")
+    return ae
+
+
+def text_fields(data):
+    """Firma, Ort, Telefon, Bemerkung: getrimmt und auf Spaltenlänge geprüft."""
+    labels = {'firma': 'Firma', 'ort': 'Ort', 'telefonnummer': 'Telefonnummer', 'bemerkung': 'Bemerkung'}
+    values = {}
+    for key, limit in MAX_LEN.items():
+        value = (data.get(key) or '').strip()
+        if len(value) > limit:
+            raise ValueError(f"{labels[key]} darf höchstens {limit} Zeichen lang sein.")
+        values[key] = value
+    return values
 
 STATUS_VALUES = {'ausgegeben', 'in arbeit', 'zurueckgegeben'}
 SESSION_TIMEOUT_SECONDS = 900
@@ -216,6 +262,21 @@ def edit_draft(schein, source, preselect_firma=None, preselect_ort=None):
         'draft_bemerkung': picked('bemerkung', schein.bemerkung or ''),
     }
 
+DOUBLE_SUBMIT_SECONDS = 15
+
+
+def is_same_recent_schein(schein, personen, texts):
+    """Wurde genau dieser Schein gerade eben angelegt (Doppeltipp auf Speichern)?"""
+    if not schein.ausgabedatum:
+        return False
+    created = schein.ausgabedatum
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    if (datetime.now(timezone.utc) - created).total_seconds() > DOUBLE_SUBMIT_SECONDS:
+        return False
+    return schein.personen == personen and all(
+        (getattr(schein, key) or '') == value for key, value in texts.items())
+
 # ===================== ROUTEN =====================
 
 @app.route('/')
@@ -255,72 +316,76 @@ def eingabe():
 
     if request.method == 'POST':
         data = request.form
-        ae_nummer = (data.get('ae_nummer') or '').strip()
-        firma = data.get('firma', '')
-        ort = data.get('ort', '')
-        telefonnummer = data.get('telefonnummer', '')
-        bemerkung = data.get('bemerkung', '')
+        raw_ae = (data.get('ae_nummer') or '').strip()
 
         def render_error(message):
             max_vorgaenge = get_max_vorgaenge()
             free_fach = get_next_fach()
+            try:
+                current_fach = get_fach_for_ae(normalize_ae(raw_ae))
+            except ValueError:
+                current_fach = None
             return render_template('eingabe.html', error=message,
                                    values=eingabe_form_values(),
                                    max_vorgaenge=max_vorgaenge, vorgang_options=get_vorgang_options(max_vorgaenge),
-                                   next_fach=get_fach_for_ae(ae_nummer) or free_fach,
+                                   next_fach=current_fach or free_fach,
                                    free_fach=free_fach,
                                    orte=Ort.query.order_by(func.lower(Ort.name).asc()).all(),
                                    firmen=Firma.query.order_by(func.lower(Firma.name).asc()).all())
 
-        if not ae_nummer:
-            return render_error("AE-Nummer darf nicht leer sein.")
-
-        # Weiterer Vorgang einer vorhandenen AE: dieselbe Mappe, egal was im Formular stand.
-        fach = get_fach_for_ae(ae_nummer)
-        if fach is None and get_next_fach() is None:
-            return render_error(mappen_voll_meldung())
-
         try:
-            vorgang = parse_int(data.get('vorgang', 10), 'Vorgang', minimum=10)
-            personen = parse_int(data.get('personen') or 0, 'Anzahl Mitarbeiter', minimum=0)
-            if fach is None:
-                fach = parse_int(data.get('fach') or get_next_fach(), 'Mappe', minimum=1)
+            ae_nummer = normalize_ae(raw_ae)
+            if not ae_nummer:
+                raise ValueError("AE-Nummer darf nicht leer sein.")
+            vorgang = parse_int(data.get('vorgang', 10), 'Vorgang', minimum=10, maximum=MAX_VORGANG)
+            personen = parse_int(data.get('personen') or 0, 'Anzahl Mitarbeiter', minimum=0, maximum=MAX_PERSONEN)
+            texts = text_fields(data)
         except ValueError as e:
             return render_error(str(e))
 
-        if firma and not Firma.query.filter_by(name=firma).first():
-            db.session.add(Firma(name=firma))
-        if ort and not Ort.query.filter_by(name=ort).first():
-            db.session.add(Ort(name=ort))
-        db.session.commit()
+        with schein_lock:
+            existing = Arbeitsschein.query.filter_by(ae_nummer=ae_nummer, vorgang=vorgang).first()
+            if existing:
+                # Doppelt abgeschickt (zweimal getippt): den eben angelegten Schein zeigen.
+                if is_same_recent_schein(existing, personen, texts):
+                    return redirect(url_for('index', neu=existing.id))
+                return render_error("Diese AE-Nummer mit diesem Vorgang existiert bereits!")
 
-        existing = Arbeitsschein.query.filter_by(ae_nummer=ae_nummer, vorgang=vorgang).first()
-        if existing:
-            return render_error("Diese AE-Nummer mit diesem Vorgang existiert bereits!")
+            # Die Mappe bestimmt immer der Server. Weiterer Vorgang einer
+            # vorhandenen AE: deren Mappe; neue AE: die kleinste freie.
+            fach = get_fach_for_ae(ae_nummer) or get_next_fach()
+            if fach is None:
+                return render_error(mappen_voll_meldung())
 
-        schein = Arbeitsschein(
-            ae_nummer=ae_nummer,
-            vorgang=vorgang,
-            personen=personen,
-            firma=firma,
-            ort=ort,
-            telefonnummer=telefonnummer,
-            fach=fach,
-            bemerkung=bemerkung,
-            status='ausgegeben'
-        )
-        db.session.add(schein)
-        try:
-            db.session.commit()
-        except IntegrityError:
-            db.session.rollback()
-            return render_error("Diese AE-Nummer mit diesem Vorgang existiert bereits!")
+            if texts['firma'] and not Firma.query.filter_by(name=texts['firma']).first():
+                db.session.add(Firma(name=texts['firma']))
+            if texts['ort'] and not Ort.query.filter_by(name=texts['ort']).first():
+                db.session.add(Ort(name=texts['ort']))
+
+            schein = Arbeitsschein(
+                ae_nummer=ae_nummer,
+                vorgang=vorgang,
+                personen=personen,
+                fach=fach,
+                status='ausgegeben',
+                **texts
+            )
+            db.session.add(schein)
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                return render_error("Diese AE-Nummer mit diesem Vorgang existiert bereits!")
 
         # Startseite zeigt dann an, in welche Mappe der Schein gehört.
         return redirect(url_for('index', neu=schein.id))
 
     max_vorgaenge = get_max_vorgaenge()
     values = eingabe_form_values()
+    try:
+        values['ae_nummer'] = normalize_ae(values['ae_nummer'])
+    except ValueError:
+        values['ae_nummer'] = ''
     free_fach = get_next_fach()
     next_fach = get_fach_for_ae(values['ae_nummer']) or free_fach
     # Von der Startseite mit vorhandener AE: nächsten freien Vorgang vorschlagen.
@@ -362,22 +427,31 @@ def edit(id):
                                    error=message, **edit_draft(schein, data))
 
         try:
-            personen = parse_int(data.get('personen') or 0, 'Anzahl Mitarbeiter', minimum=0)
-            vorgang = parse_int(data.get('vorgang', schein.vorgang), 'Vorgang', minimum=10)
+            personen = parse_int(data.get('personen') or 0, 'Anzahl Mitarbeiter', minimum=0, maximum=MAX_PERSONEN)
+            vorgang = parse_int(data.get('vorgang', schein.vorgang), 'Vorgang', minimum=10, maximum=MAX_VORGANG)
+            texts = text_fields(data)
         except ValueError as e:
             return render_error(str(e))
 
-        schein.personen = personen
-        schein.vorgang = vorgang
-        schein.firma = data.get('firma', '')
-        schein.ort = data.get('ort', '')
-        schein.telefonnummer = data.get('telefonnummer', '')
-        schein.bemerkung = data.get('bemerkung', '')
+        # Vor dem Ändern prüfen: sonst schreibt SQLAlchemy die Änderung bei der
+        # nächsten Abfrage schon weg und es gibt einen Serverfehler statt Meldung.
+        clash = Arbeitsschein.query.filter(
+            Arbeitsschein.ae_nummer == schein.ae_nummer,
+            Arbeitsschein.vorgang == vorgang,
+            Arbeitsschein.id != schein.id,
+        ).first()
+        if clash:
+            return render_error("Diese AE-Nummer mit diesem Vorgang existiert bereits!")
 
-        if schein.firma and not Firma.query.filter_by(name=schein.firma).first():
-            db.session.add(Firma(name=schein.firma))
-        if schein.ort and not Ort.query.filter_by(name=schein.ort).first():
-            db.session.add(Ort(name=schein.ort))
+        with db.session.no_autoflush:
+            if texts['firma'] and not Firma.query.filter_by(name=texts['firma']).first():
+                db.session.add(Firma(name=texts['firma']))
+            if texts['ort'] and not Ort.query.filter_by(name=texts['ort']).first():
+                db.session.add(Ort(name=texts['ort']))
+            schein.personen = personen
+            schein.vorgang = vorgang
+            for key, value in texts.items():
+                setattr(schein, key, value)
 
         try:
             db.session.commit()
@@ -409,7 +483,8 @@ def change_status(id):
 
 # Gelöschte Scheine bleiben kurz im Speicher, damit "Rückgängig" geht.
 # Die Oberfläche bietet das 10 Sekunden an, der Server hält etwas länger.
-# Nach einem Neustart ist die Liste leer, das ist gewollt.
+# Schlüssel ist ein Zufallswert, nicht die Datenbank-ID: SQLite vergibt IDs
+# gelöschter Zeilen neu. Nach einem Neustart ist die Liste leer, das ist gewollt.
 UNDO_SECONDS = 60
 recently_deleted = {}
 
@@ -423,37 +498,45 @@ def forget_old_deletions():
 
 @app.route('/delete/<int:id>', methods=['DELETE'])
 def delete_schein(id):
-    schein = db.session.get(Arbeitsschein, id)
-    if not schein:
-        return jsonify({'error': 'Arbeitsschein nicht gefunden'}), 404
-    columns = {c.name: getattr(schein, c.name) for c in Arbeitsschein.__table__.columns}
-    db.session.delete(schein)
-    db.session.commit()
-    forget_old_deletions()
-    recently_deleted[id] = (datetime.now(timezone.utc), columns)
-    return jsonify({'message': 'Arbeitsschein erfolgreich gelöscht'})
-
-
-@app.route('/restore/<int:id>', methods=['POST'])
-def restore_schein(id):
-    forget_old_deletions()
-    entry = recently_deleted.pop(id, None)
-    if not entry:
-        return jsonify({'error': 'Rückgängig ist nicht mehr möglich.'}), 410
-    columns = entry[1]
-    ae_fach = get_fach_for_ae(columns['ae_nummer'])
-    if ae_fach is not None:
-        # Andere Vorgänge dieser AE liegen noch da: zurück in deren Mappe.
-        columns['fach'] = ae_fach
-    elif Arbeitsschein.query.filter_by(fach=columns['fach']).first():
-        return jsonify({'error': f"Mappe {columns['fach']} ist inzwischen wieder belegt."}), 409
-    db.session.add(Arbeitsschein(**columns))
-    try:
+    with schein_lock:
+        schein = db.session.get(Arbeitsschein, id)
+        if not schein:
+            return jsonify({'error': 'Arbeitsschein nicht gefunden'}), 404
+        columns = {c.name: getattr(schein, c.name) for c in Arbeitsschein.__table__.columns if c.name != 'id'}
+        db.session.delete(schein)
         db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({'error': 'Diese AE-Nummer mit diesem Vorgang existiert inzwischen wieder.'}), 409
-    return jsonify({'message': 'Arbeitsschein wiederhergestellt'})
+        forget_old_deletions()
+        token = secrets.token_urlsafe(12)
+        recently_deleted[token] = (datetime.now(timezone.utc), columns)
+    return jsonify({'message': 'Arbeitsschein erfolgreich gelöscht', 'undo': token})
+
+
+@app.route('/restore/<token>', methods=['POST'])
+def restore_schein(token):
+    with schein_lock:
+        forget_old_deletions()
+        entry = recently_deleted.get(token)
+        if not entry:
+            return jsonify({'error': 'Rückgängig ist nicht mehr möglich.'}), 410
+        columns = dict(entry[1])
+        if Arbeitsschein.query.filter_by(ae_nummer=columns['ae_nummer'], vorgang=columns['vorgang']).first():
+            return jsonify({'error': 'Diese AE-Nummer mit diesem Vorgang existiert inzwischen wieder.'}), 409
+        ae_fach = get_fach_for_ae(columns['ae_nummer'])
+        if ae_fach is not None:
+            # Andere Vorgänge dieser AE liegen noch da: zurück in deren Mappe.
+            columns['fach'] = ae_fach
+        elif Arbeitsschein.query.filter_by(fach=columns['fach']).first():
+            return jsonify({'error': f"Mappe {columns['fach']} ist inzwischen wieder belegt."}), 409
+        schein = Arbeitsschein(**columns)
+        db.session.add(schein)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify({'error': 'Diese AE-Nummer mit diesem Vorgang existiert inzwischen wieder.'}), 409
+        # Erst nach Erfolg vergessen; bei Fehler bleibt der Schein wiederherstellbar.
+        recently_deleted.pop(token, None)
+    return jsonify({'message': 'Arbeitsschein wiederhergestellt', 'id': schein.id})
 
 @app.route('/einstellungen', methods=['GET', 'POST'])
 def einstellungen():
@@ -468,7 +551,7 @@ def einstellungen():
 
         if 'max_mappen' in data:
             try:
-                value = parse_int(data['max_mappen'], 'Maximale Anzahl Mappen', minimum=1)
+                value = parse_int(data['max_mappen'], 'Maximale Anzahl Mappen', minimum=1, maximum=MAX_MAPPEN_LIMIT)
                 upsert_setting('max_mappen', str(value))
                 db.session.commit()
             except ValueError as e:
@@ -476,7 +559,7 @@ def einstellungen():
 
         if 'max_vorgaenge' in data:
             try:
-                value = parse_int(data['max_vorgaenge'], 'Maximale Vorgänge', minimum=10)
+                value = parse_int(data['max_vorgaenge'], 'Maximale Vorgänge', minimum=10, maximum=MAX_VORGAENGE_LIMIT)
                 upsert_setting('max_vorgaenge', str(value))
                 db.session.commit()
             except ValueError as e:
@@ -485,7 +568,7 @@ def einstellungen():
         # Datei-Import Orte
         if 'orte_file' in request.files:
             file = request.files['orte_file']
-            if file and file.filename.endswith('.txt'):
+            if file and file.filename.lower().endswith('.txt'):
                 try:
                     content = file.read().decode('utf-8')
                 except UnicodeDecodeError:
@@ -493,13 +576,13 @@ def einstellungen():
                 else:
                     for line in content.splitlines():
                         name = line.strip()
-                        if name and not Ort.query.filter_by(name=name).first():
+                        if name and len(name) <= MAX_LEN['ort'] and not Ort.query.filter_by(name=name).first():
                             db.session.add(Ort(name=name))
 
         # Datei-Import Firmen
         if 'firmen_file' in request.files:
             file = request.files['firmen_file']
-            if file and file.filename.endswith('.txt'):
+            if file and file.filename.lower().endswith('.txt'):
                 try:
                     content = file.read().decode('utf-8')
                 except UnicodeDecodeError:
@@ -507,31 +590,17 @@ def einstellungen():
                 else:
                     for line in content.splitlines():
                         name = line.strip()
-                        if name and not Firma.query.filter_by(name=name).first():
+                        if name and len(name) <= MAX_LEN['firma'] and not Firma.query.filter_by(name=name).first():
                             db.session.add(Firma(name=name))
 
         db.session.commit()
-
-    max_mappen = Setting.query.filter_by(key='max_mappen').first()
-    if not max_mappen:
-        max_mappen = Setting(key='max_mappen', value='300')
-        db.session.add(max_mappen)
-        db.session.commit()
-
-    max_vorgaenge_setting = Setting.query.filter_by(key='max_vorgaenge').first()
-    if not max_vorgaenge_setting:
-        max_vorgaenge_setting = Setting(key='max_vorgaenge', value='200')
-        db.session.add(max_vorgaenge_setting)
-        db.session.commit()
-
-    max_vorgaenge = int(max_vorgaenge_setting.value)
 
     orte = Ort.query.order_by(func.lower(Ort.name).asc()).all()
     firmen = Firma.query.order_by(func.lower(Firma.name).asc()).all()
 
     return render_template('einstellungen.html',
-                           max_mappen=max_mappen.value,
-                           max_vorgaenge=max_vorgaenge,
+                           max_mappen=get_max_mappen(),
+                           max_vorgaenge=get_max_vorgaenge(),
                            orte=orte,
                            firmen=firmen,
                            error=import_error)
@@ -544,6 +613,8 @@ def add_ort():
     name = (request.get_json(silent=True) or {}).get('name', '').strip()
     if not name:
         return jsonify({'error': 'Name darf nicht leer sein'}), 400
+    if len(name) > 100:
+        return jsonify({'error': 'Name darf höchstens 100 Zeichen lang sein'}), 400
     existing = Ort.query.filter_by(name=name).first()
     if existing:
         return jsonify({'id': existing.id, 'name': existing.name})
@@ -561,6 +632,8 @@ def update_ort(id):
     name = (request.get_json(silent=True) or {}).get('name', '').strip()
     if not name:
         return jsonify({'error': 'Name darf nicht leer sein'}), 400
+    if len(name) > 100:
+        return jsonify({'error': 'Name darf höchstens 100 Zeichen lang sein'}), 400
     if Ort.query.filter(Ort.name == name, Ort.id != id).first():
         return jsonify({'error': 'Ort existiert bereits'}), 400
     ort.name = name
@@ -585,6 +658,8 @@ def add_firma():
     name = (request.get_json(silent=True) or {}).get('name', '').strip()
     if not name:
         return jsonify({'error': 'Name darf nicht leer sein'}), 400
+    if len(name) > 100:
+        return jsonify({'error': 'Name darf höchstens 100 Zeichen lang sein'}), 400
     existing = Firma.query.filter_by(name=name).first()
     if existing:
         return jsonify({'id': existing.id, 'name': existing.name})
@@ -602,6 +677,8 @@ def update_firma(id):
     name = (request.get_json(silent=True) or {}).get('name', '').strip()
     if not name:
         return jsonify({'error': 'Name darf nicht leer sein'}), 400
+    if len(name) > 100:
+        return jsonify({'error': 'Name darf höchstens 100 Zeichen lang sein'}), 400
     if Firma.query.filter(Firma.name == name, Firma.id != id).first():
         return jsonify({'error': 'Firma existiert bereits'}), 400
     firma.name = name
@@ -657,23 +734,40 @@ def pdf_safe(value):
     )
 
 
-def cleanup_old_pdfs(folder):
+# So viele Dateien bleiben immer liegen, auch wenn sie nach der Uhr alt sind.
+# Der Kiosk hat kein Netz und damit keine Zeitsynchronisation: springt die Uhr
+# (leere BIOS-Batterie, falsch gestellt), darf das nicht alle Backups löschen.
+KEEP_NEWEST_FILES = BACKUP_RETENTION_DAYS
+
+
+def cleanup_old_files(folder, prefix, suffix):
+    """Löscht Dateien älter als BACKUP_RETENTION_DAYS, behält aber immer die neuesten."""
     if not folder or not os.path.isdir(folder):
         return
     cutoff = datetime.now() - timedelta(days=BACKUP_RETENTION_DAYS)
-    for name in os.listdir(folder):
-        if name.startswith('uebersicht_') and name.endswith('.pdf'):
-            path = os.path.join(folder, name)
-            try:
-                if datetime.fromtimestamp(os.path.getmtime(path)) < cutoff:
-                    os.remove(path)
-            except OSError:
-                pass
+    # Dateinamen enthalten Datum/Uhrzeit, also sortiert der Name chronologisch.
+    names = sorted(n for n in os.listdir(folder) if n.startswith(prefix) and n.endswith(suffix))
+    for name in names[:-KEEP_NEWEST_FILES]:
+        path = os.path.join(folder, name)
+        try:
+            if datetime.fromtimestamp(os.path.getmtime(path)) < cutoff:
+                os.remove(path)
+        except OSError:
+            pass
+
+
+def cleanup_old_pdfs(folder):
+    cleanup_old_files(folder, 'uebersicht_', '.pdf')
+
+
+PDF_CELL_MAX_CHARS = 600
+pdf_lock = threading.Lock()
 
 
 def generate_pdf():
     # Der Cron-Job läuft in einem eigenen Thread ohne Request-Kontext.
-    with app.app_context():
+    # Lock: Knopf und 18-Uhr-Job sollen nicht gleichzeitig dieselbe Datei schreiben.
+    with pdf_lock, app.app_context():
         scheine = (
             Arbeitsschein.query
             .order_by(Arbeitsschein.ae_nummer, Arbeitsschein.vorgang)
@@ -681,12 +775,15 @@ def generate_pdf():
         )
         filename = f"uebersicht_{datetime.now().strftime('%Y-%m-%d')}.pdf"
         filepath = os.path.join(app.static_folder, filename)
+        # Erst in eine Zwischendatei, dann umbenennen: ein Abbruch hinterlässt
+        # kein halbes PDF unter dem richtigen Namen.
+        tmp_path = filepath + '.tmp'
 
         # Querformat, damit neun Spalten auf A4 passen. Hochformat mit den
         # alten Spaltenbreiten war breiter als die Seite und die Erzeugung
         # ist mit LayoutError abgebrochen.
         doc = SimpleDocTemplate(
-            filepath,
+            tmp_path,
             pagesize=landscape(A4),
             leftMargin=0.8 * cm,
             rightMargin=0.8 * cm,
@@ -733,6 +830,8 @@ def generate_pdf():
                 status_de,
                 s.bemerkung or "-",
             ]
+            # Sehr lange Texte kürzen, eine Zeile höher als die Seite bricht das PDF ab.
+            row = [v if len(v) <= PDF_CELL_MAX_CHARS else v[:PDF_CELL_MAX_CHARS] + ' …' for v in row]
             data.append([Paragraph(pdf_safe(value), cell_style) for value in row])
 
         col_widths = [2.6*cm, 1.8*cm, 1.6*cm, 4.4*cm, 3.4*cm, 2.4*cm, 3.2*cm, 2.6*cm, 5.7*cm]
@@ -753,7 +852,12 @@ def generate_pdf():
             pdf_safe(f"Arbeitsscheine {datetime.now().strftime('%d.%m.%Y %H:%M')} - {len(scheine)} Einträge"),
             title_style,
         )
-        doc.build([title, Spacer(1, 0.4 * cm), table])
+        try:
+            doc.build([title, Spacer(1, 0.4 * cm), table])
+            os.replace(tmp_path, filepath)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
         cleanup_old_pdfs(app.static_folder)
         copy_pdf_to_backup_dir(filepath)
         return filename
@@ -786,15 +890,30 @@ def get_db_path():
     return uri[len(prefix):] if uri.startswith(prefix) else None
 
 def cleanup_old_backups(directory):
-    cutoff = datetime.now() - timedelta(days=BACKUP_RETENTION_DAYS)
-    for name in os.listdir(directory):
-        if name.startswith('scheine_') and name.endswith('.db'):
-            path = os.path.join(directory, name)
-            try:
-                if datetime.fromtimestamp(os.path.getmtime(path)) < cutoff:
-                    os.remove(path)
-            except OSError:
-                pass
+    cleanup_old_files(directory, 'scheine_', '.db')
+
+
+def latest_backup_age_hours():
+    """Alter des neuesten lokalen Backups in Stunden, None wenn es keins gibt."""
+    db_path = get_db_path()
+    if not db_path:
+        return None
+    backup_dir = os.path.join(os.path.dirname(db_path), 'backups')
+    if not os.path.isdir(backup_dir):
+        return None
+    times = [os.path.getmtime(os.path.join(backup_dir, n)) for n in os.listdir(backup_dir)
+             if n.startswith('scheine_') and n.endswith('.db')]
+    if not times:
+        return None
+    return (datetime.now().timestamp() - max(times)) / 3600
+
+
+def backup_if_overdue():
+    """Beim Start: Backup nachholen, wenn das letzte älter als ein Tag ist (Gerät war um 3 Uhr aus)."""
+    with app.app_context():
+        age = latest_backup_age_hours()
+        if age is None or age > 24:
+            backup_database()
 
 def backup_database():
     db_path = get_db_path()
@@ -851,12 +970,20 @@ with app.app_context():
 # nur mit einem einzigen Worker-Prozess betreiben (z.B. --workers 1 --threads 4),
 # sonst laufen taeglicher PDF-Export und Backup mehrfach und SQLite bekommt
 # gleichzeitige Schreibzugriffe aus mehreren Prozessen.
-scheduler = BackgroundScheduler()
+# AE_SCHEDULER=0 schaltet ihn ab (Tests, flask shell), damit kein zweiter
+# Scheduler parallel zur laufenden App Backups oder PDFs schreibt.
+# misfire_grace_time: ist der Job zur vollen Stunde verspätet (Neustart, viel
+# Last), läuft er innerhalb einer Stunde noch nach statt still auszufallen.
+scheduler = BackgroundScheduler(job_defaults={'misfire_grace_time': 3600, 'coalesce': True})
 scheduler.add_job(lambda: run_scheduled(generate_pdf), 'cron', hour=18, minute=0, id='daily_pdf')
 scheduler.add_job(lambda: run_scheduled(backup_database), 'cron', hour=3, minute=0, id='daily_backup')
-scheduler.start()
-atexit.register(lambda: scheduler.shutdown() if scheduler.running else None)
+if os.environ.get('AE_SCHEDULER', '1') != '0':
+    scheduler.add_job(lambda: run_scheduled(backup_if_overdue), 'date',
+                      run_date=datetime.now() + timedelta(seconds=60), id='catch_up_backup')
+    scheduler.start()
+    atexit.register(lambda: scheduler.shutdown() if scheduler.running else None)
 
 # ===================== START =====================
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Ohne Reloader, sonst importiert Flask das Modul zweimal (zwei Scheduler).
+    app.run(debug=True, use_reloader=False)
