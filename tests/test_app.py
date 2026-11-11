@@ -172,18 +172,6 @@ def test_edit_keeps_non_standard_vorgang_when_unchanged(client):
     assert client.get('/scheine').get_json()[0]['vorgang'] == 11
 
 
-def test_edit_preselect_creates_and_selects_new_firma(client):
-    create_schein(client, '20202020')
-    schein_id = client.get('/scheine').get_json()[0]['id']
-
-    resp = client.get(f'/edit/{schein_id}?preselect_firma=NeueFirma')
-    assert resp.status_code == 200
-    assert 'NeueFirma' in resp.get_data(as_text=True)
-
-    login(client)
-    assert 'NeueFirma' in client.get('/einstellungen').get_data(as_text=True)
-
-
 def test_einstellungen_requires_login(client):
     assert client.get('/einstellungen', follow_redirects=False).status_code == 302
 
@@ -345,7 +333,7 @@ def test_edit_preselect_keeps_draft_fields(client):
     create_schein(client, "80808080")
     schein_id = client.get("/scheine").get_json()[0]["id"]
     resp = client.get(
-        f"/edit/{schein_id}?preselect_firma=NeueFirma&personen=6&telefonnummer=444&bemerkung=notiz&vorgang=11"
+        f"/edit/{schein_id}?firma=NeueFirma&personen=6&telefonnummer=444&bemerkung=notiz&vorgang=11"
     )
     body = resp.get_data(as_text=True)
     assert resp.status_code == 200
@@ -714,3 +702,21 @@ def test_backup_wird_nachgeholt_wenn_zu_alt(client, clean_backups):
     assert len(os.listdir(clean_backups)) == 1
     app_module.backup_if_overdue()  # frisch: kein zweites
     assert len(os.listdir(clean_backups)) == 1
+
+
+def test_wieder_in_arbeit_loescht_rueckgabedatum(client):
+    create_schein(client, '8001')
+    schein_id = client.get('/scheine').get_json()[0]['id']
+    client.put(f'/status/{schein_id}', json={'status': 'zurueckgegeben'})
+    with app_module.app.app_context():
+        assert app_module.db.session.get(app_module.Arbeitsschein, schein_id).rueckgabedatum is not None
+    client.put(f'/status/{schein_id}', json={'status': 'in arbeit'})
+    with app_module.app.app_context():
+        assert app_module.db.session.get(app_module.Arbeitsschein, schein_id).rueckgabedatum is None
+
+
+def test_adresszeile_legt_keine_firma_mehr_an(client):
+    client.get('/eingabe?preselect_firma=Ueber%20URL&preselect_ort=Ueber%20URL')
+    with app_module.app.app_context():
+        assert app_module.Firma.query.count() == 0
+        assert app_module.Ort.query.count() == 0

@@ -59,3 +59,15 @@ def test_env_datei_nur_fuer_besitzer_lesbar(tmp_path):
     assert (os.stat(env_file).st_mode & 0o777) == 0o600
     assert 'BACKUP_DIR=/media/ssd' in env_file.read_text()
     assert not (tmp_path / '.env.tmp').exists()
+
+
+def test_env_behaelt_besitzer_wenn_als_root_aufgerufen(tmp_path):
+    if os.geteuid() != 0:
+        import pytest
+        pytest.skip('braucht root')
+    env_file = tmp_path / '.env'
+    env_file.write_text('X=1\n')
+    os.chown(env_file, 65534, 65534)
+    hash_password.upsert_env_value(str(env_file), 'ADMIN_PASSWORD_HASH', 'abc')
+    st = os.stat(env_file)
+    assert (st.st_uid, st.st_gid) == (65534, 65534)

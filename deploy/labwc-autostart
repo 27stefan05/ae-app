@@ -32,7 +32,7 @@ while true; do
         --disable-session-crashed-bubble \
         --no-first-run \
         --check-for-update-interval=31536000 \
-        --disable-features=TranslateUI \
+        --disable-features=TranslateUI,OverscrollHistoryNavigation \
         --password-store=basic \
         --overscroll-history-navigation=0 \
         --disable-pinch \
