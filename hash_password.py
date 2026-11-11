@@ -40,6 +40,11 @@ def upsert_env_value(env_path, key, value):
     with os.fdopen(fd, 'w') as f:
         f.writelines(lines)
     os.chmod(tmp_path, 0o600)
+    # Als root aufgerufen (sudo ohne -u): Besitzer der bisherigen .env bzw. des
+    # Ordners behalten, sonst kann die App die Datei nicht mehr lesen.
+    if hasattr(os, 'geteuid') and os.geteuid() == 0:
+        owner = os.stat(env_path if os.path.exists(env_path) else os.path.dirname(os.path.abspath(env_path)))
+        os.chown(tmp_path, owner.st_uid, owner.st_gid)
     os.replace(tmp_path, env_path)
 
 

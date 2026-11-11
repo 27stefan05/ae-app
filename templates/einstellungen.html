@@ -299,6 +299,7 @@ function addOrt(e) { addEntry('ort', e); }
 function addFirma(e) { addEntry('firma', e); }
 
 let entryTarget = null;
+let entryBusy = false;
 
 function showEntryEdit(kind, li) {
     const cfg = ENTRY_KINDS[kind];
@@ -320,6 +321,8 @@ function saveEntryEdit() {
         bootstrap.Modal.getInstance(document.getElementById('entryEditModal')).hide();
         return;
     }
+    if (entryBusy) return;
+    entryBusy = true;
     entryRequest(`${cfg.url}/${li.dataset.id}`, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
@@ -330,7 +333,8 @@ function saveEntryEdit() {
         li.querySelector('span').textContent = newName;
         bootstrap.Modal.getInstance(document.getElementById('entryEditModal')).hide();
     })
-    .catch(err => { errorEl.textContent = err.message; });
+    .catch(err => { errorEl.textContent = err.message; })
+    .finally(() => { entryBusy = false; });
 }
 
 function showEntryDelete(kind, li) {
@@ -343,6 +347,9 @@ function showEntryDelete(kind, li) {
 }
 
 function confirmEntryDelete() {
+    // Gegen Doppeltipp: nur eine Anfrage gleichzeitig.
+    if (entryBusy) return;
+    entryBusy = true;
     const cfg = ENTRY_KINDS[entryTarget.kind];
     const li = entryTarget.li;
     entryRequest(`${cfg.url}/${li.dataset.id}`, { method: 'DELETE' })
@@ -350,7 +357,8 @@ function confirmEntryDelete() {
             li.remove();
             bootstrap.Modal.getInstance(document.getElementById('entryDeleteModal')).hide();
         })
-        .catch(err => { document.getElementById('entryDeleteError').textContent = err.message; });
+        .catch(err => { document.getElementById('entryDeleteError').textContent = err.message; })
+        .finally(() => { entryBusy = false; });
 }
 
 document.getElementById('entryEditModal').addEventListener('shown.bs.modal', function() {

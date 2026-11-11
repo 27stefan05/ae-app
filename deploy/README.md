@@ -30,23 +30,14 @@ Die Bildschirmtastatur ist Teil der App (`static/osk.js`).
   Kiosk-Modus startet (und Chromium bei einem Absturz automatisch neu startet)
 - Bildschirm-Rotation ins Hochformat via `wlr-randr` (siehe `deploy/labwc-autostart`)
 
-## Bildschirm-Rotation auf anderer Hardware anpassen
+## Bildschirm-Rotation
 
-`deploy/labwc-autostart` ruft beim Start `wlr-randr --output DP-1 --transform 270`
-auf. Diese Werte sind hardwareabhaengig und wurden fuer das aktuelle Geraet
-ermittelt - labwc hat dafuer keine eigene `rc.xml`-Option, `wlr-randr` im
-Autostart-Kontext von labwc funktioniert aber zuverlaessig (im Gegensatz zu
-einem manuellen Aufruf von aussen, der an der Wayland-Umgebung scheitert).
+`deploy/labwc-autostart` dreht beim Start jeden angeschlossenen Ausgang per
+`wlr-randr --transform 270` ins Hochformat, der Anschlussname (DP, HDMI) spielt
+keine Rolle. labwc hat dafuer keine eigene `rc.xml`-Option.
 
-Auf neuer/anderer Hardware den Ausgabenamen so ermitteln:
-```
-ls /sys/class/drm/
-cat /sys/class/drm/*/status
-```
-Der Name kann trotz HDMI-Kabel z.B. `DP-1` lauten, wenn der physische Port
-intern per DP++ (Dual-Mode DisplayPort) umgesetzt wird - das ist normal.
-Bei falscher Drehrichtung `--transform 90` statt `270` (oder umgekehrt)
-probieren, dann `deploy/labwc-autostart` entsprechend anpassen.
+Steht das Bild auf dem Kopf, in `deploy/labwc-autostart` `270` durch `90`
+ersetzen und `install.sh` erneut ausfuehren.
 
 ## Startbildschirm
 
@@ -72,10 +63,9 @@ das Logo nach zwei Minuten von selbst.
 
 ## Was bewusst nicht automatisiert ist (hardware-/ortsabhaengig)
 
-- **Bildschirm-Standby verhindern**: der Touchscreen darf nie in den
-  Energiesparmodus gehen. Je nach Compositor-Version z.B. per `wlopm` oder
-  einer entsprechenden labwc-Einstellung - am Geraet selbst pruefen, ob/wann
-  der Bildschirm dunkel wird, und danach gezielt abschalten.
+- **Bildschirm-Standby**: das System schaltet den Bildschirm nicht ab. Eine
+  automatische Abschaltung (Auto-Standby, Eco) ist eine Einstellung im Menue
+  des Monitors und dort auszuschalten.
 - **Chromium via Snap**: Ubuntu installiert `chromium-browser` standardmaessig
   als Snap-Paket, das beim ersten `apt install` aus dem Internet nachgeladen
   wird. Ist waehrend der Einrichtung kein Internet verfuegbar, muss Chromium
@@ -92,16 +82,29 @@ sudo systemctl restart ae-app      # nach Aenderungen an .env neu laden
 
 ## Update ohne Netz (USB-Stick)
 
+Auf einem Rechner mit Internet den aktuellen Stand als eine Datei auf den Stick
+legen (ein Ordner mit `.git` geht nicht: auf dem Stick gehoeren die Dateien
+root, und git verweigert dann den Zugriff):
+
 ```
-cd /opt/ae-app
-sudo -u kwin git pull /media/<stick>/ae-app main
-# nur wenn sich requirements-prod.txt geaendert hat:
-sudo WHEELS=/media/<stick>/ae-app-wheels bash deploy/install.sh
-sudo systemctl restart ae-app
+git clone https://github.com/27stefan05/ae-app.git && cd ae-app
+git bundle create /pfad/zum/stick/ae-app.bundle main
 ```
 
-Ohne `WHEELS` und ohne Netz laeuft `install.sh` trotzdem durch und laesst die
-vorhandene Python-Umgebung stehen.
+Am Kiosk als Admin-Benutzer:
+
+```
+cd /opt/ae-app
+sudo -u kwin git pull /media/<stick>/ae-app.bundle main
+sudo bash deploy/install.sh
+```
+
+`install.sh` nach jedem Update ausfuehren, es uebernimmt auch geaenderte
+Dienst- und Autostart-Dateien und startet die App neu. Ohne Netz laesst es die
+vorhandene Python-Umgebung stehen. Nur wenn sich `requirements-prod.txt`
+geaendert hat, die Pakete vorher mit
+`pip download -r requirements-prod.txt -d ae-app-wheels` auf den Stick holen und
+`sudo WHEELS=/media/<stick>/ae-app-wheels bash deploy/install.sh` aufrufen.
 
 ## Uhrzeit
 

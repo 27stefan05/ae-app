@@ -517,36 +517,59 @@
     window.aeOfferUndo = (function () {
         var UNDO_MS = 10000;
         var timer = null;
+        // Mehrere Scheine kurz nacheinander gelöscht: alle lassen sich zurückholen.
+        var pending = [];
+
+        function post(token) {
+            return fetch('/restore/' + encodeURIComponent(token), { method: 'POST' }).then(function (res) {
+                return res.json()
+                    .catch(function () { return {}; })
+                    .then(function (data) { return { ok: res.ok, data: data }; });
+            });
+        }
 
         return function (token, text, onRestored) {
             var el = document.getElementById('undoToast');
             var btn = document.getElementById('undoToastBtn');
             var toast = bootstrap.Toast.getOrCreateInstance(el);
-            document.getElementById('undoToastText').textContent = text;
+            function close() {
+                pending = [];
+                toast.hide();
+            }
+
+            pending.push(token);
+            document.getElementById('undoToastText').textContent =
+                pending.length > 1 ? pending.length + ' Scheine gelöscht' : text;
             btn.disabled = false;
             btn.onclick = function () {
                 btn.disabled = true;
-                fetch('/restore/' + encodeURIComponent(token), { method: 'POST' })
-                    .then(function (res) {
-                        return res.json()
-                            .catch(function () { return {}; })
-                            .then(function (data) { return { ok: res.ok, data: data }; });
-                    })
-                    .then(function (result) {
-                        toast.hide();
-                        if (!result.ok) {
-                            window.aeMessage(result.data.error || 'Wiederherstellen fehlgeschlagen.', 'Rückgängig nicht möglich');
-                            return;
-                        }
-                        if (onRestored) onRestored();
-                    })
-                    .catch(function () {
-                        toast.hide();
-                        window.aeMessage('Wiederherstellen fehlgeschlagen.', 'Rückgängig nicht möglich');
+                if (timer) clearTimeout(timer);
+                var errors = [];
+                var restored = 0;
+                function next() {
+                    if (!pending.length) {
+                        close();
+                        if (restored && onRestored) onRestored();
+                        if (errors.length) window.aeMessage(errors.join(' '), 'Rückgängig nicht möglich');
+                        return;
+                    }
+                    post(pending[0]).then(function (result) {
+                        pending.shift();
+                        if (result.ok) restored += 1;
+                        else errors.push(result.data.error || 'Wiederherstellen fehlgeschlagen.');
+                        next();
+                    }).catch(function () {
+                        // Keine Antwort vom Server: Hinweis stehen lassen, nochmal versuchen können.
+                        btn.disabled = false;
+                        if (restored && onRestored) onRestored();
+                        timer = setTimeout(close, UNDO_MS);
+                        window.aeMessage('Keine Antwort vom Server. Bitte noch einmal auf Rückgängig tippen.', 'Rückgängig');
                     });
+                }
+                next();
             };
             if (timer) clearTimeout(timer);
-            timer = setTimeout(function () { toast.hide(); }, UNDO_MS);
+            timer = setTimeout(close, UNDO_MS);
             toast.show();
         };
     })();
@@ -598,13 +621,17 @@
     // - Seit dem Oeffnen kamen Zeichen, die in kein Feld gingen: das war ein
     //   Scan (Ziffern + Enter), keine Bestaetigung. Sonst wuerde ein zweiter
     //   Scan den Status des ersten Scheins aendern.
-    var typedIntoModal = false;
-    document.addEventListener('shown.bs.modal', function () { typedIntoModal = false; });
+    // Reine Hinweisfenster (Mappe, Meldung) schliessen sich bei einem Scan
+    // und geben ihn an das Suchfeld weiter, damit der naechste Schein nicht
+    // ins Leere gescannt wird.
+    var INFO_MODALS = ['mappeModal', 'aeMessageModal'];
+    var typedIntoModal = '';
+    document.addEventListener('shown.bs.modal', function () { typedIntoModal = ''; });
     document.addEventListener('keydown', function (e) {
         if (!e.key || e.key.length !== 1 || !document.querySelector('.modal.show')) return;
         var t = e.target;
         if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
-        typedIntoModal = true;
+        typedIntoModal += e.key;
     }, true);
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Enter') return;
@@ -612,8 +639,21 @@
         if (!openModal) return;
         if (e.target.closest && e.target.closest('button, a, select')) return;
         if (typedIntoModal) {
-            typedIntoModal = false;
+            const typed = typedIntoModal;
+            typedIntoModal = '';
             e.preventDefault();
+            const field = document.getElementById('ae_nummer');
+            if (INFO_MODALS.indexOf(openModal.id) >= 0) {
+                if (field) {
+                    openModal.addEventListener('hidden.bs.modal', function () {
+                        field.focus();
+                        field.value = typed;
+                        field.dispatchEvent(new Event('input', { bubbles: true }));
+                        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+                    }, { once: true });
+                }
+                bootstrap.Modal.getOrCreateInstance(openModal).hide();
+            }
             return;
         }
         const confirmBtn = openModal.querySelector('.btn-primary, .btn-danger');
@@ -636,6 +676,12 @@
             return el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && textTypes.indexOf(el.type) >= 0);
         });
         if (fields.length > 1) e.preventDefault();
+    });
+
+    // Seite kommt aus dem Zurueck-Cache des Browsers (z.B. Wischgeste):
+    // neu laden, sonst ist der Speichern-Knopf noch gesperrt und die Liste alt.
+    window.addEventListener('pageshow', function (e) {
+        if (e.persisted) location.reload();
     });
 
     // Nach 10 Minuten ohne Tippen oder Antippen zurueck auf die Startseite.

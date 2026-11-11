@@ -13,3 +13,5 @@ migrations/
 .pytest_cache/
 static/uebersicht_*.pdf
 .env
+.env.tmp
+static/uebersicht_*.pdf.tmp

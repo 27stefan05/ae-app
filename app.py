@@ -236,12 +236,12 @@ def eingabe_form_values():
         'personen': src.get('personen') or '1',
         'telefonnummer': src.get('telefonnummer') or '',
         'bemerkung': src.get('bemerkung') or '',
-        'firma': src.get('preselect_firma') or src.get('firma') or '',
-        'ort': src.get('preselect_ort') or src.get('ort') or '',
+        'firma': src.get('firma') or '',
+        'ort': src.get('ort') or '',
     }
 
 
-def edit_draft(schein, source, preselect_firma=None, preselect_ort=None):
+def edit_draft(schein, source):
     def picked(key, fallback):
         if source is not None and key in source:
             return source.get(key)
@@ -254,8 +254,8 @@ def edit_draft(schein, source, preselect_firma=None, preselect_ort=None):
         selected_vorgang = schein.vorgang
 
     return {
-        'selected_firma': preselect_firma or picked('firma', schein.firma) or '',
-        'selected_ort': preselect_ort or picked('ort', schein.ort) or '',
+        'selected_firma': picked('firma', schein.firma) or '',
+        'selected_ort': picked('ort', schein.ort) or '',
         'selected_vorgang': selected_vorgang,
         'draft_personen': picked('personen', schein.personen),
         'draft_telefon': picked('telefonnummer', schein.telefonnummer or ''),
@@ -301,19 +301,6 @@ def get_scheine():
 
 @app.route('/eingabe', methods=['GET', 'POST'])
 def eingabe():
-    # Neue Firma/Ort automatisch anlegen, wenn per Redirect übergeben
-    preselect_firma = request.args.get('preselect_firma')
-    if preselect_firma:
-        if not Firma.query.filter_by(name=preselect_firma).first():
-            db.session.add(Firma(name=preselect_firma))
-            db.session.commit()
-
-    preselect_ort = request.args.get('preselect_ort')
-    if preselect_ort:
-        if not Ort.query.filter_by(name=preselect_ort).first():
-            db.session.add(Ort(name=preselect_ort))
-            db.session.commit()
-
     if request.method == 'POST':
         data = request.form
         raw_ae = (data.get('ae_nummer') or '').strip()
@@ -402,19 +389,6 @@ def eingabe():
 def edit(id):
     schein = Arbeitsschein.query.get_or_404(id)
 
-    # Neue Firma/Ort automatisch anlegen, wenn per Redirect übergeben
-    preselect_firma = request.args.get('preselect_firma')
-    if preselect_firma:
-        if not Firma.query.filter_by(name=preselect_firma).first():
-            db.session.add(Firma(name=preselect_firma))
-            db.session.commit()
-
-    preselect_ort = request.args.get('preselect_ort')
-    if preselect_ort:
-        if not Ort.query.filter_by(name=preselect_ort).first():
-            db.session.add(Ort(name=preselect_ort))
-            db.session.commit()
-
     if request.method == 'POST':
         data = request.form
 
@@ -466,7 +440,7 @@ def edit(id):
     max_vorgaenge = get_max_vorgaenge()
     return render_template('edit.html', schein=schein, orte=orte, firmen=firmen, max_vorgaenge=max_vorgaenge,
                            vorgang_options=get_vorgang_options(max_vorgaenge),
-                           **edit_draft(schein, request.args, preselect_firma, preselect_ort))
+                           **edit_draft(schein, request.args))
 
 @app.route('/status/<int:id>', methods=['PUT'])
 def change_status(id):
@@ -476,8 +450,8 @@ def change_status(id):
     if status not in STATUS_VALUES:
         return jsonify({'error': 'Ungültiger Status'}), 400
     schein.status = status
-    if status == 'zurueckgegeben':
-        schein.rueckgabedatum = datetime.now(timezone.utc)
+    # Wieder in Arbeit: das alte Rückgabedatum gilt nicht mehr.
+    schein.rueckgabedatum = datetime.now(timezone.utc) if status == 'zurueckgegeben' else None
     db.session.commit()
     return jsonify({'message': 'Status geändert'})
 
