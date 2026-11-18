@@ -229,9 +229,7 @@ document.getElementById('scheineListe').addEventListener('click', function(e) {
     } else if (btn.dataset.action === 'delete') {
         const schein = allScheine.find(s => String(s.id) === String(id));
         if (!schein) return;
-        document.getElementById('deleteModalBody').innerHTML =
-            `<p>Möchtest du <strong>AE ${escapeHtml(schein.ae_nummer)} (Vorgang ${schein.vorgang})</strong> wirklich löschen?</p>` +
-            `<p class="text-body-secondary">Danach 10 Sekunden lang rückgängig zu machen.</p>`;
+        window.aeFillDeleteDialog(document.getElementById('deleteModalBody'), schein, allScheine);
         const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteModal'));
         modal.show();
         document.getElementById('confirmDelete').onclick = function() {

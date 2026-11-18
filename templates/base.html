@@ -512,6 +512,34 @@
         }
     };
 
+    // Inhalt des Löschen-Fensters (Start und Übersicht): welcher Schein, in
+    // welcher Mappe er liegt und ob die Mappe danach frei wird.
+    window.aeFillDeleteDialog = function (body, schein, alle) {
+        function el(tag, cls, text) {
+            var node = document.createElement(tag);
+            if (cls) node.className = cls;
+            if (text !== undefined) node.textContent = text;
+            return node;
+        }
+        var andere = alle.filter(function (s) {
+            return String(s.ae_nummer) === String(schein.ae_nummer) && s.id !== schein.id;
+        }).map(function (s) { return s.vorgang; }).sort(function (a, b) { return a - b; });
+
+        body.textContent = '';
+        var frage = el('p', 'mb-3');
+        frage.appendChild(document.createTextNode('Schein '));
+        frage.appendChild(el('strong', '', 'AE ' + schein.ae_nummer + ' (Vorgang ' + schein.vorgang + ')'));
+        frage.appendChild(document.createTextNode(' wirklich löschen?'));
+        body.appendChild(frage);
+        body.appendChild(el('p', 'text-body-secondary mb-1', 'Der Schein ist in'));
+        body.appendChild(el('div', 'fs-4', 'Mappe'));
+        body.appendChild(el('div', 'mappe-number', schein.fach));
+        body.appendChild(el('p', 'mt-2 mb-3', andere.length
+            ? 'Vorgang ' + andere.join(', ') + (andere.length > 1 ? ' bleiben' : ' bleibt') + ' in der Mappe.'
+            : 'Die Mappe wird danach frei.'));
+        body.appendChild(el('p', 'text-body-secondary small mb-0', 'Danach 10 Sekunden lang rückgängig zu machen.'));
+    };
+
     // Nach dem Löschen 10 Sekunden lang "Rückgängig" anbieten.
     // Der Server hält gelöschte Scheine dafür kurz vor (/restore/<token>).
     window.aeOfferUndo = (function () {
