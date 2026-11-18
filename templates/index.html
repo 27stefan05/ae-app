@@ -400,10 +400,8 @@ function showMappeModal(info) {
 }
 
 function showDeleteModal(id, aeNummer, vorgang) {
-    document.getElementById('deleteModalBody').innerHTML = `
-        <p>Möchten Sie den Schein <strong>AE ${escapeHtml(aeNummer)} (Vorgang ${vorgang})</strong> wirklich löschen?</p>
-        <p class="text-body-secondary">Danach 10 Sekunden lang rückgängig zu machen.</p>
-    `;
+    const schein = allScheine.find(s => s.id === id);
+    window.aeFillDeleteDialog(document.getElementById('deleteModalBody'), schein, allScheine);
     const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteModal'));
     modal.show();
 
