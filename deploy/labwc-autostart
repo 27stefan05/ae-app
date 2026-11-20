@@ -13,8 +13,6 @@ done
 # Dieselbe Farbe und dasselbe Logo wie der Boot-Splash, damit dazwischen
 # kein Terminal aufblitzt. swaybg laeuft schon in der gedrehten Aufloesung.
 swaybg -c '#0078DC' -i /opt/ae-app/deploy/plymouth/watermark.png -m center >/dev/null 2>&1 &
-sleep 0.4
-plymouth quit >/dev/null 2>&1 || true
 
 # Die Bildschirmtastatur ist Teil der App (static/osk.js), kein eigenes Programm.
 
