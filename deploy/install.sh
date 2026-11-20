@@ -122,28 +122,21 @@ cat > /etc/systemd/system.conf.d/kiosk-quiet.conf << 'EOF'
 ShowStatus=no
 EOF
 
-# Plymouth nicht schon am Login-Prompt beenden. labwc macht das, sobald
-# das Logo im Fenster steht. Falls labwc haengt, gibt es nach 2 Minuten frei.
+# Plymouth am Ende des Starts beenden (wie normal, vor dem Autologin), aber
+# das Logo stehen lassen, bis labwc das Bild uebernimmt. Sonst blitzt kurz
+# die Konsole auf. Beenden darf Plymouth nur root, nicht der Kiosk-Benutzer.
 mkdir -p /etc/systemd/system/plymouth-quit.service.d
 cat > /etc/systemd/system/plymouth-quit.service.d/kiosk.conf << 'EOF'
 [Service]
 ExecStart=
-ExecStart=/bin/true
+ExecStart=-/usr/bin/plymouth quit --retain-splash
 EOF
-cat > /etc/systemd/system/kiosk-plymouth-failsafe.service << 'EOF'
-[Unit]
-Description=Plymouth beenden, falls der Kiosk nicht uebernimmt
-After=multi-user.target
-
-[Service]
-Type=oneshot
-ExecStart=/bin/sh -c 'sleep 120; plymouth quit || true'
-
-[Install]
-WantedBy=multi-user.target
-EOF
+# Frueherer Notausgang (Plymouth nach 2 Minuten beenden), nicht mehr noetig.
+if [ -f /etc/systemd/system/kiosk-plymouth-failsafe.service ]; then
+    systemctl disable kiosk-plymouth-failsafe.service >/dev/null 2>&1 || true
+    rm -f /etc/systemd/system/kiosk-plymouth-failsafe.service
+fi
 systemctl daemon-reload
-systemctl enable kiosk-plymouth-failsafe.service
 
 # Ohne Netz wartet der Start sonst bis zu 2 Minuten auf eine Verbindung.
 # Die App braucht kein Netz.

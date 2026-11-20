@@ -58,9 +58,7 @@ Autologin gilt nur fuer tty1. Eine Tastatur anschliessen:
 | Strg+Alt+F2 | Login-Prompt. Mit dem Admin-Benutzer anmelden (`kwin` hat kein sudo und keinen Passwort-Login), nicht mit dem App-Passwort |
 | Strg+Alt+F1 | zurueck zum Kiosk |
 
-Das geht auch schon, waehrend das Logo laeuft. Ohne Tastatur kommt man vom
-Touchscreen aus nicht auf die Konsole. Wenn labwc nicht startet, verschwindet
-das Logo nach zwei Minuten von selbst.
+Ohne Tastatur kommt man vom Touchscreen aus nicht auf die Konsole.
 
 ## Was bewusst nicht automatisiert ist (hardware-/ortsabhaengig)
 
