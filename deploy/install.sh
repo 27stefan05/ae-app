@@ -45,7 +45,7 @@ echo "==> Installiere System-Pakete..."
 apt update || echo "WARNUNG: apt update fehlgeschlagen (kein Netz?), nutze vorhandene Paketlisten."
 # Die Bildschirmtastatur bringt die App selbst mit (static/osk.js).
 apt install -y python3 python3-venv python3-pip \
-    labwc seatd wlr-randr swaybg curl plymouth chromium-browser
+    labwc seatd wlr-randr swaybg curl plymouth plymouth-theme-spinner chromium-browser
 
 # Chromium (Snap) nicht von selbst aktualisieren lassen, solange das Geraet
 # am Netz haengt: ein Update mitten im Betrieb kann den Kiosk neu starten.
@@ -71,9 +71,10 @@ echo "==> Boot-Logo (Plymouth) einrichten..."
 THEME_DIR="/usr/share/plymouth/themes/ae-splash"
 rm -rf "$THEME_DIR"
 mkdir -p "$THEME_DIR"
+# Modul two-step (aus plymouth-theme-spinner). Das script-Modul ist auf dem
+# Kiosk-PC beim Start abgestuerzt.
 cp "$APP_DIR/deploy/plymouth/ae-splash.plymouth" \
-   "$APP_DIR/deploy/plymouth/ae-splash.script" \
-   "$APP_DIR/deploy/plymouth/logo.png" \
+   "$APP_DIR/deploy/plymouth/"*.png \
    "$THEME_DIR/"
 # Ubuntu hat kein plymouth-set-default-theme, das Standard-Theme laeuft dort
 # ueber update-alternatives (default.plymouth). Danach die Initramfs neu
@@ -143,6 +144,10 @@ WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
 systemctl enable kiosk-plymouth-failsafe.service
+
+# Ohne Netz wartet der Start sonst bis zu 2 Minuten auf eine Verbindung.
+# Die App braucht kein Netz.
+systemctl mask systemd-networkd-wait-online.service
 
 # tty2 bleibt ein normales Login fuer die Wartung. Autologin gilt nur fuer tty1.
 systemctl enable getty@tty2.service

@@ -1,8 +1,22 @@
 [Plymouth Theme]
 Name=AE Splash
 Description=Arbeitsschein-Kiosk, nur das Logo
-ModuleName=script
+ModuleName=two-step
 
-[script]
+# two-step statt script: Das script-Modul ist auf dem Kiosk-PC beim Start
+# abgestuerzt (SEGV), two-step ist das Modul, das Ubuntu selbst verwendet.
+# Hintergrund wie die Kopfzeile der App (#0078DC), Logo (watermark.png) mittig.
+# lock.png, entry.png und bullet.png braucht two-step zwingend, sie erscheinen
+# nur bei einer Passwortabfrage beim Start (verschluesselte Festplatte).
+[two-step]
 ImageDir=/usr/share/plymouth/themes/ae-splash
-ScriptFile=/usr/share/plymouth/themes/ae-splash/ae-splash.script
+WatermarkHorizontalAlignment=.5
+WatermarkVerticalAlignment=.5
+DialogHorizontalAlignment=.5
+DialogVerticalAlignment=.7
+Transition=none
+TransitionDuration=0.0
+BackgroundStartColor=0x0078dc
+BackgroundEndColor=0x0078dc
+UseFirmwareBackground=false
+UseProgressBar=false
