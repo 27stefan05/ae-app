@@ -19,8 +19,9 @@ Die Bildschirmtastatur ist Teil der App (`static/osk.js`).
 
 ## Was das Skript automatisiert
 
-- System-Pakete (`labwc`, `seatd`, `wlr-randr`, `swaybg`, `curl`, `plymouth`, `chromium-browser`)
+- System-Pakete (`labwc`, `seatd`, `wlr-randr`, `swaybg`, `curl`, `plymouth`, `plymouth-theme-spinner`, `chromium-browser`)
 - Boot-Logo: Plymouth bis labwc steht, danach dasselbe Logo, bis die App auf Port 5000 antwortet
+- Start wartet nicht aufs Netz (`systemd-networkd-wait-online` ist maskiert), der Kiosk laeuft offline
 - Benutzer `kwin` in den Gruppen `video`, `render` und `input` (plus `seat`, falls vorhanden), `seatd` wird gestartet
 - Python-venv + Abhaengigkeiten aus `requirements-prod.txt`
 - systemd-Service `ae-app` (Gunicorn, startet automatisch, neu startet bei Absturz)
