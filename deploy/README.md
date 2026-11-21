@@ -49,6 +49,26 @@ oeffnet Chromium die App. Die Farbe ist das Blau der Kopfzeile (`#0078DC`).
 Das GRUB-Menue ist versteckt. Es erscheint, wenn man beim Einschalten **Esc**
 (UEFI) oder die **linke Shift-Taste** (BIOS) haelt.
 
+## GRUB-Passwort
+
+Ohne GRUB-Passwort kann jeder mit einer Tastatur beim Start `init=/bin/bash`
+anhaengen und hat eine root-Konsole. Das Passwort setzt ein eigenes Skript:
+
+```bash
+cd /opt/ae-app
+sudo bash deploy/grub-password.sh
+```
+
+- Der Kiosk startet weiter ohne Eingabe. Nur Aendern beim Start (Taste `e`,
+  Konsole `c`) verlangt Benutzer `grubadmin` und das Passwort.
+- Der Wiederherstellungsmodus wird abgeschaltet (er oeffnet sonst eine
+  root-Konsole ohne Passwort).
+- GRUB nutzt die englische Tastatur. Das Skript laesst deshalb nur
+  Kleinbuchstaben ohne y und z sowie Ziffern zu, mindestens 8 Zeichen.
+- Passwort **vorher** aufschreiben. Sind Admin- und GRUB-Passwort beide weg,
+  bleibt nur die Neuinstallation.
+- Entfernen: `sudo bash deploy/grub-password.sh --entfernen`
+
 ## Wartungsterminal
 
 Autologin gilt nur fuer tty1. Eine Tastatur anschliessen:
