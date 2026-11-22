@@ -271,7 +271,8 @@
             align-items: center;
             gap: 8px;
         }
-        .theme-toggle #themeHint {
+        .theme-toggle #themeHint,
+        .theme-toggle #cleanHint {
             font-size: 0.72rem;
             font-weight: 500;
             opacity: 0.85;
@@ -280,6 +281,46 @@
         .theme-toggle:focus-visible {
             background: rgba(255,255,255,.24);
             color: white;
+        }
+
+        /* Reinigungsmodus: schwarzer Bildschirm, faengt 30 s lang jede
+           Beruehrung ab. Schwarz, weil man darauf Schlieren am besten sieht. */
+        .clean-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 3000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            background: #000;
+            color: #8b95a3;
+            text-align: center;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .clean-overlay.show { display: flex; }
+        .clean-overlay .clean-count {
+            font-size: 7rem;
+            font-weight: 700;
+            line-height: 1;
+            color: #c9d1db;
+        }
+        .clean-overlay .clean-bar {
+            width: 60%;
+            height: 6px;
+            border-radius: 3px;
+            background: #1f2630;
+            overflow: hidden;
+        }
+        .clean-overlay .clean-bar span {
+            display: block;
+            height: 100%;
+            width: 100%;
+            background: #4da3ff;
+            transform-origin: left center;
         }
         
         .card { 
@@ -436,15 +477,32 @@
                 <img src="/static/logo.png" alt="Uniper Logo" height="48" class="me-3">
                 <span class="fw-bold" style="font-size: 1.65rem; color: white;">Arbeitsschein Verwaltung</span>
             </div>
-            <button type="button" id="themeToggle" class="theme-toggle" aria-pressed="false" aria-label="Dunkles Design einschalten">
-                <span class="theme-main">
-                    <i class="bi bi-moon-stars" id="themeIcon" aria-hidden="true"></i>
-                    <span id="themeToggleLabel">Dunkel</span>
-                </span>
-                <span id="themeHint">automatisch</span>
-            </button>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" id="cleanButton" class="theme-toggle" aria-label="Reinigungsmodus: Touch für 30 Sekunden sperren">
+                    <span class="theme-main">
+                        <i class="bi bi-droplet" aria-hidden="true"></i>
+                        <span>Reinigen</span>
+                    </span>
+                    <span id="cleanHint">Touch 30 s aus</span>
+                </button>
+                <button type="button" id="themeToggle" class="theme-toggle" aria-pressed="false" aria-label="Dunkles Design einschalten">
+                    <span class="theme-main">
+                        <i class="bi bi-moon-stars" id="themeIcon" aria-hidden="true"></i>
+                        <span id="themeToggleLabel">Dunkel</span>
+                    </span>
+                    <span id="themeHint">automatisch</span>
+                </button>
+            </div>
         </div>
     </nav>
+
+    <div id="cleanOverlay" class="clean-overlay" role="status" aria-live="polite" aria-hidden="true">
+        <i class="bi bi-droplet" style="font-size: 3rem;" aria-hidden="true"></i>
+        <div class="fs-3 fw-semibold">Reinigungsmodus</div>
+        <div class="clean-count" id="cleanCount">30</div>
+        <div class="clean-bar"><span id="cleanBar"></span></div>
+        <div>Touch ist gesperrt, das Display kann jetzt abgewischt werden.</div>
+    </div>
 
     <!-- Navigation als Tab-Leiste (statt Sidebar, damit auf hochkant Touchdisplays kein Platz verschenkt wird) -->
     <nav class="top-tabs d-flex">
@@ -640,6 +698,81 @@
                 tick();
             });
         }
+    })();
+
+    // Reinigungsmodus: 30 Sekunden lang schluckt ein schwarzer Vorhang jede
+    // Beruehrung und jeden Tastendruck. Kein Knopf zum vorzeitigen Beenden,
+    // den wuerde man beim Wischen treffen. Liegt am Ende noch ein Finger auf
+    // dem Display, bleibt der Vorhang, bis er weg ist, sonst wuerde das
+    // Loslassen etwas darunter antippen.
+    (function () {
+        var CLEAN_SECONDS = 30;
+        var btn = document.getElementById('cleanButton');
+        var overlay = document.getElementById('cleanOverlay');
+        var count = document.getElementById('cleanCount');
+        var bar = document.getElementById('cleanBar');
+        if (!btn || !overlay) return;
+        var active = false;
+        var endAt = 0;
+        var timer = null;
+        var pointersDown = 0;
+
+        function swallow(e) {
+            if (!active) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+        }
+
+        function finish() {
+            // Erst wenn der Finger weg ist. Geht ein Loslassen verloren,
+            // gibt der Vorhang nach 10 Sekunden Nachlauf trotzdem frei.
+            if (pointersDown > 0 && Date.now() < endAt + 10000) return;
+            active = false;
+            clearInterval(timer);
+            overlay.classList.remove('show');
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+
+        function update() {
+            var left = Math.max(0, endAt - Date.now());
+            count.textContent = Math.ceil(left / 1000);
+            bar.style.transform = 'scaleX(' + (left / (CLEAN_SECONDS * 1000)) + ')';
+            if (left <= 0) finish();
+        }
+
+        function start() {
+            if (window.aeHideKeyboard) window.aeHideKeyboard();
+            if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+            active = true;
+            pointersDown = 0;
+            endAt = Date.now() + CLEAN_SECONDS * 1000;
+            overlay.classList.add('show');
+            overlay.setAttribute('aria-hidden', 'false');
+            update();
+            clearInterval(timer);
+            timer = setInterval(update, 200);
+        }
+
+        btn.addEventListener('click', start);
+        overlay.addEventListener('pointerdown', function (e) { pointersDown += 1; swallow(e); });
+        ['pointerup', 'pointercancel'].forEach(function (type) {
+            overlay.addEventListener(type, function (e) {
+                pointersDown = Math.max(0, pointersDown - 1);
+                swallow(e);
+                if (active && pointersDown === 0 && Date.now() >= endAt) {
+                    // Kurz warten, damit der Klick des Loslassens noch hier landet.
+                    setTimeout(finish, 300);
+                }
+            });
+        });
+        ['click', 'dblclick', 'contextmenu', 'touchstart', 'touchmove', 'touchend', 'wheel', 'mousedown', 'mouseup']
+            .forEach(function (type) {
+                overlay.addEventListener(type, swallow, { passive: false });
+            });
+        // Tastatur und Scanner: waehrend der Reinigung nichts durchlassen.
+        ['keydown', 'keypress', 'keyup'].forEach(function (type) {
+            window.addEventListener(type, swallow, true);
+        });
     })();
 
     // Enter bestaetigt das aktuell offene Bootstrap-Modal (klickt den
