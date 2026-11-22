@@ -29,15 +29,21 @@ Die Bildschirmtastatur ist Teil der App (`static/osk.js`).
 - Kiosk-Autostart: Autologin auf tty1 fuer den `kwin`-Benutzer, der beim Login
   automatisch `labwc` startet, das wiederum Chromium im
   Kiosk-Modus startet (und Chromium bei einem Absturz automatisch neu startet)
-- Bildschirm-Rotation ins Hochformat via `wlr-randr` (siehe `deploy/labwc-autostart`)
+- Bildschirm-Rotation ins Hochformat via `wlr-randr` und Touch-Zuordnung (siehe `deploy/labwc-autostart`, `rc.xml`)
 
 ## Bildschirm-Rotation
 
 `deploy/labwc-autostart` dreht beim Start jeden angeschlossenen Ausgang per
-`wlr-randr --transform 270` ins Hochformat, der Anschlussname (DP, HDMI) spielt
+`wlr-randr --transform 90` ins Hochformat, der Anschlussname (DP, HDMI) spielt
 keine Rolle. labwc hat dafuer keine eigene `rc.xml`-Option.
 
-Steht das Bild auf dem Kopf, in `deploy/labwc-autostart` `270` durch `90`
+Den Touch dreht labwc nur mit, wenn er dem Bildschirm zugeordnet ist.
+`install.sh` erkennt den angeschlossenen Anschluss (z. B. `HDMI-A-1`) und
+schreibt ihn als `<touch mapToOutput="..."/>` in `~kwin/.config/labwc/rc.xml`.
+Haengt der Monitor spaeter an einem anderen Anschluss, `install.sh` erneut
+ausfuehren.
+
+Steht das Bild auf dem Kopf, in `deploy/labwc-autostart` `90` durch `270`
 ersetzen und `install.sh` erneut ausfuehren.
 
 ## Startbildschirm

@@ -182,6 +182,30 @@ sudo -u "$KIOSK_USER" cp "$APP_DIR/deploy/labwc-autostart" "/home/$KIOSK_USER/.c
 sudo -u "$KIOSK_USER" cp "$APP_DIR/deploy/labwc-environment" "/home/$KIOSK_USER/.config/labwc/environment"
 chmod +x "/home/$KIOSK_USER/.config/labwc/autostart"
 
+# Touch dem Bildschirm zuordnen, sonst dreht labwc ihn nicht mit und der
+# Finger trifft nach der Drehung die falsche Stelle. Ohne deviceName gilt das
+# fuer alle Touchgeraete (der Name des Touchscreens enthaelt ein (R)-Zeichen).
+TOUCH_OUTPUT=""
+for status in /sys/class/drm/card*-*/status; do
+    [ -f "$status" ] || continue
+    if [ "$(cat "$status")" = "connected" ]; then
+        connector="$(basename "$(dirname "$status")")"
+        TOUCH_OUTPUT="${connector#card*-}"
+        break
+    fi
+done
+if [ -n "$TOUCH_OUTPUT" ]; then
+    sudo -u "$KIOSK_USER" tee "/home/$KIOSK_USER/.config/labwc/rc.xml" > /dev/null << EOF
+<?xml version="1.0"?>
+<labwc_config>
+  <touch mapToOutput="$TOUCH_OUTPUT" />
+</labwc_config>
+EOF
+    echo "Touch zugeordnet zu Bildschirm $TOUCH_OUTPUT."
+else
+    echo "WARNUNG: Kein angeschlossener Bildschirm gefunden, Touch nicht zugeordnet."
+fi
+
 BASH_PROFILE="/home/$KIOSK_USER/.bash_profile"
 AUTOSTART_LINE='[ -z "$WAYLAND_DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ] && exec labwc'
 if ! grep -qF "$AUTOSTART_LINE" "$BASH_PROFILE" 2>/dev/null; then
