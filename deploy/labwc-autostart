@@ -6,8 +6,9 @@
 # Bildschirm ins Hochformat drehen. labwc hat dafuer keine eigene rc.xml-Option.
 # Alle angeschlossenen Ausgaenge, damit ein anderer Anschluss (HDMI statt DP)
 # oder ein neuer Monitor nicht quer bleibt. Bei falscher Drehrichtung 90 <-> 270.
+# Den Touch dreht labwc ueber rc.xml (mapToOutput, legt install.sh an) mit.
 for output in $(wlr-randr | awk '/^[^ ]/ {print $1}'); do
-    wlr-randr --output "$output" --transform 270
+    wlr-randr --output "$output" --transform 90
 done
 
 # Dieselbe Farbe und dasselbe Logo wie der Boot-Splash, damit dazwischen
