@@ -58,14 +58,20 @@
     .ae-chevron { transition: transform .15s ease; }
     .ae-card.open .ae-chevron { transform: rotate(180deg); }
 
-    /* Pfeil unten: Es kommen noch weitere Scheine. Antippen blaettert weiter. */
-    .more-below {
+    /* Pfeile unten: "weitere" (es kommen noch Scheine, blaettert weiter) und
+       "nach oben" (sobald gescrollt wurde, springt an den Anfang). */
+    .scroll-buttons {
         position: fixed;
         left: 50%;
         bottom: 24px;
         z-index: 1015;
         transform: translateX(-50%);
         display: flex;
+        gap: 12px;
+        pointer-events: none;
+    }
+    .more-below {
+        display: none;
         align-items: center;
         gap: 8px;
         padding: 10px 22px;
@@ -76,11 +82,10 @@
         font-weight: 600;
         font-size: 1.1rem;
         box-shadow: 0 4px 16px rgba(0, 0, 0, .3);
-        opacity: 0;
         pointer-events: none;
-        transition: opacity .2s ease;
     }
     .more-below.show {
+        display: flex;
         opacity: .92;
         pointer-events: auto;
     }
@@ -114,9 +119,14 @@
     <!-- Liste -->
     <div id="scheineListe" class="list-group mt-3"></div>
 
-    <button type="button" id="moreBelow" class="more-below" aria-label="Weiter nach unten">
-        <i class="bi bi-chevron-double-down" aria-hidden="true"></i> weitere
-    </button>
+    <div class="scroll-buttons">
+        <button type="button" id="toTop" class="more-below" aria-label="Zum Anfang der Liste">
+            <i class="bi bi-chevron-double-up" aria-hidden="true"></i> nach oben
+        </button>
+        <button type="button" id="moreBelow" class="more-below" aria-label="Weiter nach unten">
+            <i class="bi bi-chevron-double-down" aria-hidden="true"></i> weitere
+        </button>
+    </div>
 
 </div>
 
@@ -586,18 +596,26 @@ document.getElementById('statusModal').addEventListener('hidden.bs.modal', funct
     refocusAeNummerField();
 });
 
-// Pfeil "weitere" einblenden, solange die Liste unten aus dem Bild geht.
+// Pfeil "weitere" einblenden, solange die Liste unten aus dem Bild geht,
+// "nach oben", sobald gescrollt wurde.
 (function () {
     const btn = document.getElementById('moreBelow');
+    const up = document.getElementById('toTop');
     function update() {
         const rest = document.documentElement.scrollHeight - (window.scrollY + window.innerHeight);
         btn.classList.toggle('show', rest > 40);
+        up.classList.toggle('show', window.scrollY > 40);
     }
     // Fokus im Suchfeld lassen (Scanner), nur blaettern.
-    btn.addEventListener('pointerdown', function (e) { e.preventDefault(); });
-    btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    [btn, up].forEach(function (b) {
+        b.addEventListener('pointerdown', function (e) { e.preventDefault(); });
+        b.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    });
     btn.addEventListener('click', function () {
         window.scrollBy({ top: Math.round(window.innerHeight * 0.6), behavior: 'smooth' });
+    });
+    up.addEventListener('click', function () {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     });
     window.addEventListener('scroll', update, { passive: true });
     window.addEventListener('resize', update);
