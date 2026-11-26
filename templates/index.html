@@ -40,20 +40,38 @@
         flex: 1 1 0;
         margin: 0;
     }
+
+    /* Suchleiste und Ueberschrift bleiben unter Kopfzeile und Tabs stehen. */
+    .ae-sticky {
+        position: sticky;
+        top: var(--ae-top-h, 0px);
+        z-index: 1010;
+        background: var(--bs-body-bg);
+        margin: -1.5rem -1.5rem 0;
+        padding: 1.5rem 1.5rem .75rem;
+        box-shadow: 0 8px 8px -8px rgba(0, 0, 0, .25);
+    }
+
+    /* Knoepfe eingeklappt. Auf: Karte antippen oder AE-Nummer genau suchen. */
+    .ae-card { cursor: pointer; }
+    .ae-card:not(.open) .ae-actions { display: none !important; }
+    .ae-chevron { transition: transform .15s ease; }
+    .ae-card.open .ae-chevron { transform: rotate(180deg); }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid px-4 py-4">
 
+    <div class="ae-sticky">
     <!-- Suchleiste -->
-    <div class="row mb-4">
+    <div class="row mb-3">
         <div class="col-12">
             <div class="input-group input-group-lg">
                 <input type="text" id="ae_nummer" class="form-control"
                        placeholder="AE-Nummer eingeben..."
                        inputmode="numeric" autocomplete="off" maxlength="8" autofocus
-                       oninput="limitInput(this); filterListe()"
+                       oninput="limitInput(this); openAe.clear(); filterListe()"
                        onkeydown="handleAeNummerKeydown(event)">
                 <button class="btn btn-primary" onclick="showAusgebenModal()">
                     <img src="/static/plus.svg" height="24" style="filter: brightness(0) invert(1);"> Neuer Schein
@@ -62,10 +80,11 @@
         </div>
     </div>
 
-    <h5 class="text-center mb-4 text-muted" id="listeHeader">Aktuell ausgegebene AE</h5>
+    <h5 class="text-center mb-0 text-muted" id="listeHeader">Aktuell ausgegebene AE</h5>
+    </div>
 
     <!-- Liste -->
-    <div id="scheineListe" class="list-group"></div>
+    <div id="scheineListe" class="list-group mt-3"></div>
 
 </div>
 
@@ -209,16 +228,32 @@ function buttonsHtml(s) {
         </button>`;
 }
 
+// Manuell aufgeklappte Karten (AE-Nummern). Eine genau gesuchte AE ist
+// immer offen. Neues Tippen ins Suchfeld klappt alles wieder zu.
+const openAe = new Set();
+
+function isOpen(ae) {
+    const q = document.getElementById('ae_nummer').value.trim();
+    return openAe.has(String(ae)) || (q !== '' && q === String(ae));
+}
+
+const chevron = '<i class="bi bi-chevron-down ae-chevron ms-2" aria-hidden="true"></i>';
+
 function renderEinzelKarte(s, color) {
     return `
-    <div class="list-group-item list-group-item-action p-0 mb-2 border rounded" data-id="${s.id}">
-        <div style="background-color: ${color}; color: white; border-radius: 6px 6px 0 0;" class="px-3 py-2">
-            <strong>AE ${escapeHtml(s.ae_nummer)}</strong> &nbsp;&nbsp;
-            <span>Vorgang ${s.vorgang}</span> &nbsp;&nbsp;
-            <span>Mappe ${s.fach}</span>
+    <div class="list-group-item list-group-item-action p-0 mb-2 border rounded ae-card ${isOpen(s.ae_nummer) ? 'open' : ''}"
+         data-id="${s.id}" data-ae="${escapeHtml(s.ae_nummer)}">
+        <div style="background-color: ${color}; color: white; border-radius: 6px 6px 0 0;"
+             class="px-3 py-2 d-flex justify-content-between align-items-center">
+            <span>
+                <strong>AE ${escapeHtml(s.ae_nummer)}</strong> &nbsp;&nbsp;
+                <span>Vorgang ${s.vorgang}</span> &nbsp;&nbsp;
+                <span>Mappe ${s.fach}</span>
+            </span>
+            ${chevron}
         </div>
         <div class="px-3 py-2">${detailsHtml(s)}</div>
-        <div class="px-3 pb-2 d-flex justify-content-end gap-2">${buttonsHtml(s)}</div>
+        <div class="px-3 pb-2 d-flex justify-content-end gap-2 ae-actions">${buttonsHtml(s)}</div>
     </div>`;
 }
 
@@ -234,15 +269,16 @@ function renderGruppenKarte(group, color) {
                     </div>
                     ${detailsHtml(s)}
                 </div>
-                <div class="d-flex gap-2 flex-shrink-0">${buttonsHtml(s)}</div>
+                <div class="d-flex gap-2 flex-shrink-0 ae-actions">${buttonsHtml(s)}</div>
             </div>
         </div>`).join('');
     return `
-    <div class="list-group-item p-0 mb-2 border rounded">
+    <div class="list-group-item p-0 mb-2 border rounded ae-card ${isOpen(first.ae_nummer) ? 'open' : ''}"
+         data-ae="${escapeHtml(first.ae_nummer)}">
         <div style="background-color: ${color}; color: white; border-radius: 6px 6px 0 0;"
-             class="px-3 py-2 d-flex justify-content-between">
+             class="px-3 py-2 d-flex justify-content-between align-items-center">
             <span><strong>AE ${escapeHtml(first.ae_nummer)}</strong> &nbsp;&nbsp; <span>Mappe ${first.fach}</span></span>
-            <span>${group.length} Vorgänge</span>
+            <span>${group.length} Vorgänge${chevron}</span>
         </div>
         <div class="pb-1">${rows}</div>
     </div>`;
@@ -274,7 +310,14 @@ function renderScheineListe(filteredScheine) {
 
 document.getElementById('scheineListe').addEventListener('click', function(e) {
     const btn = e.target.closest('[data-action]');
-    if (!btn) return;
+    if (!btn) {
+        // Antippen der Karte klappt die Knoepfe auf oder zu.
+        const card = e.target.closest('.ae-card');
+        if (!card) return;
+        const ae = card.dataset.ae;
+        if (card.classList.toggle('open')) openAe.add(ae); else openAe.delete(ae);
+        return;
+    }
     const item = btn.closest('[data-id]');
     const id = parseInt(item.dataset.id, 10);
     const schein = allScheine.find(s => s.id === id);
